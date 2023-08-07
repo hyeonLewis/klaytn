@@ -125,6 +125,17 @@ func (v *Vrank) Bitmap() string {
 	return hex.EncodeToString(compressed)
 }
 
+func (v *Vrank) EarlyCommits() []time.Duration {
+	serialized := serialize(v.committee, v.commitArrivalTimeMap)
+	earlyCommits := make([]time.Duration, 0)
+	for _, t := range serialized {
+		if assess(t, v.threshold) == vrankArrivedEarly {
+			earlyCommits = append(earlyCommits, t)
+		}
+	}
+	return earlyCommits
+}
+
 func (v *Vrank) LateCommits() []time.Duration {
 	serialized := serialize(v.committee, v.commitArrivalTimeMap)
 	lateCommits := make([]time.Duration, 0)
@@ -139,8 +150,9 @@ func (v *Vrank) LateCommits() []time.Duration {
 // Log logs accumulated data in a compressed form
 func (v *Vrank) Log() {
 	var (
-		lastCommit  = time.Duration(0)
-		lateCommits = v.LateCommits()
+		lastCommit   = time.Duration(0)
+		earlyCommits = v.EarlyCommits()
+		lateCommits  = v.LateCommits()
 	)
 
 	// lastCommit = max(lateCommits)
@@ -156,7 +168,8 @@ func (v *Vrank) Log() {
 	logger.Info("VRank", "seq", v.view.Sequence.Int64(),
 		"round", v.view.Round.Int64(),
 		"bitmap", v.Bitmap(),
-		"late", encodeDurationBatch(lateCommits),
+		"early", earlyCommits,
+		"late", lateCommits,
 	)
 }
 
