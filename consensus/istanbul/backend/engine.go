@@ -529,9 +529,12 @@ func (sb *backend) Finalize(chain consensus.ChainReader, header *types.Header, s
 		registryByteCode := []byte(registry.RegistryBinRuntime)
 		registryAddress := common.HexToAddress(registry.RegistryContractAddress)
 
-		state.SetCode(registryAddress, registryByteCode)
-
-		logger.Info("successfully set the registry contract code", "block", header.Number.Uint64())
+		err := state.SetCode(registryAddress, registryByteCode)
+		if err != nil {
+			logger.Error("failed to set the registry contract code", "err", err)
+		} else {
+			logger.Info("successfully set the registry contract code", "block", header.Number.Uint64())
+		}
 	}
 	header.Root = state.IntermediateRoot(true)
 
