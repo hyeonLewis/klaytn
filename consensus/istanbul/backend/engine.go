@@ -38,6 +38,7 @@ import (
 	istanbulCore "github.com/klaytn/klaytn/consensus/istanbul/core"
 	"github.com/klaytn/klaytn/consensus/istanbul/validator"
 	"github.com/klaytn/klaytn/consensus/misc"
+	"github.com/klaytn/klaytn/contracts/registry"
 	"github.com/klaytn/klaytn/crypto/sha3"
 	"github.com/klaytn/klaytn/networks/rpc"
 	"github.com/klaytn/klaytn/reward"
@@ -520,6 +521,17 @@ func (sb *backend) Finalize(chain consensus.ChainReader, header *types.Header, s
 			}
 			logger.Info("successfully executed treasury rebalancing (KIP-103)", "memo", string(memo))
 		}
+	}
+
+	// Deploy the registry contract if the block is the registry fork block
+	if chain.Config().IsRegistryForkBlock(header.Number) {
+		// Set the registry contract code to the stateDB
+		registryByteCode := []byte(registry.RegistryBinRuntime)
+		registryAddress := common.HexToAddress(registry.RegistryContractAddress)
+
+		state.SetCode(registryAddress, registryByteCode)
+
+		logger.Info("successfully set the registry contract code", "block", header.Number.Uint64())
 	}
 	header.Root = state.IntermediateRoot(true)
 
