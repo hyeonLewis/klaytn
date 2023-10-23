@@ -496,11 +496,11 @@ func CreateDB(ctx *node.ServiceContext, config *Config, name string) database.DB
 
 // CreateConsensusEngine creates the required type of consensus engine instance for a Klaytn service
 func CreateConsensusEngine(ctx *node.ServiceContext, config *Config, chainConfig *params.ChainConfig, db database.DBManager, gov governance.Engine, nodetype common.ConnType) consensus.Engine {
-	// Only istanbul  BFT is allowed in the main net. PoA is supported by service chain
+	// Only istanbul BFT is allowed in the main net. PoA is supported by service chain
 	if chainConfig.Governance == nil {
 		chainConfig.Governance = params.GetDefaultGovernanceConfig()
 	}
-	return istanbulBackend.New(config.Rewardbase, &config.Istanbul, ctx.NodeKey(), db, gov, nodetype)
+	return istanbulBackend.New(config.Rewardbase, &config.Istanbul, ctx.NodeKey(), ctx.BlsNodeKey(), db, gov, nodetype)
 }
 
 // APIs returns the collection of RPC services the ethereum package offers.

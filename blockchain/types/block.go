@@ -64,6 +64,9 @@ type Header struct {
 	Vote       []byte `json:"voteData,omitempty"`
 
 	BaseFee *big.Int `json:"baseFeePerGas,omitempty"    rlp:"optional"`
+
+	RandomReveal []byte `json:"randomReveal,omitempty"  rlp:"optional"`
+	MixHash common.Hash `json:"mixHash,omitempty"       rlp:"optional"`
 }
 
 // field type overrides for gencodec
@@ -257,6 +260,11 @@ func CopyHeader(h *Header) *Header {
 		cpy.Vote = make([]byte, len(h.Vote))
 		copy(cpy.Vote, h.Vote)
 	}
+	if len(h.RandomReveal) > 0 {
+		// This field exists after Randao hardfork
+		cpy.RandomReveal = make([]byte, len(h.RandomReveal))
+		copy(cpy.RandomReveal, h.RandomReveal)
+	}
 	return &cpy
 }
 
@@ -305,6 +313,8 @@ func (b *Block) ParentHash() common.Hash    { return b.header.ParentHash }
 func (b *Block) TxHash() common.Hash        { return b.header.TxHash }
 func (b *Block) ReceiptHash() common.Hash   { return b.header.ReceiptHash }
 func (b *Block) Extra() []byte              { return common.CopyBytes(b.header.Extra) }
+func (b *Block) RandomReveal() []byte 		{ return common.CopyBytes(b.header.RandomReveal) }
+func (b *Block) MixHash() common.Hash 		{ return b.header.MixHash }
 
 func (b *Block) Header() *Header { return CopyHeader(b.header) }
 
@@ -402,7 +412,15 @@ func (h *Header) String() string {
 	if h.BaseFee != nil {
 		strBaseHeader = strBaseHeader + `	BaseFee:          %x
 		`
-		strHeader = fmt.Sprintf(prefix+strBaseHeader+suffix, h.Hash(), h.ParentHash, h.Rewardbase, h.Root, h.TxHash, h.ReceiptHash, h.Bloom, h.BlockScore, h.Number, h.GasUsed, h.Time, h.TimeFoS, h.Extra, h.Governance, h.Vote, h.BaseFee)
+		if len(h.RandomReveal) == 0 {
+			strHeader = fmt.Sprintf(prefix+strBaseHeader+suffix, h.Hash(), h.ParentHash, h.Rewardbase, h.Root, h.TxHash, h.ReceiptHash, h.Bloom, h.BlockScore, h.Number, h.GasUsed, h.Time, h.TimeFoS, h.Extra, h.Governance, h.Vote, h.BaseFee)
+		} else {
+			strBaseHeader = strBaseHeader + 
+			`	RandomReveal:     %x
+				MixHash:          %x
+			`
+			strHeader = fmt.Sprintf(prefix+strBaseHeader+suffix, h.Hash(), h.ParentHash, h.Rewardbase, h.Root, h.TxHash, h.ReceiptHash, h.Bloom, h.BlockScore, h.Number, h.GasUsed, h.Time, h.TimeFoS, h.Extra, h.Governance, h.Vote, h.BaseFee, h.RandomReveal, h.MixHash)
+		}
 	} else {
 		strHeader = fmt.Sprintf(prefix+strBaseHeader+suffix, h.Hash(), h.ParentHash, h.Rewardbase, h.Root, h.TxHash, h.ReceiptHash, h.Bloom, h.BlockScore, h.Number, h.GasUsed, h.Time, h.TimeFoS, h.Extra, h.Governance, h.Vote)
 	}

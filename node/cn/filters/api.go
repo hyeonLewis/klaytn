@@ -223,8 +223,8 @@ func (api *PublicFilterAPI) NewBlockFilter() rpc.ID {
 	return headerSub.ID
 }
 
-// RPCMarshalHeader converts the given header to the RPC output that includes the baseFeePerGas field.
-func RPCMarshalHeader(head *types.Header, isEnabledEthTxTypeFork bool) map[string]interface{} {
+// RPCMarshalHeader converts the given header to the RPC output that includes the baseFeePerGas and randao fields.
+func RPCMarshalHeader(head *types.Header, isEnabledEthTxTypeFork bool, isRandaoFork bool) map[string]interface{} {
 	result := map[string]interface{}{
 		"parentHash":       head.ParentHash,
 		"reward":           head.Rewardbase,
@@ -251,6 +251,11 @@ func RPCMarshalHeader(head *types.Header, isEnabledEthTxTypeFork bool) map[strin
 		}
 	}
 
+	if isRandaoFork {
+		result["randomReveal"] = hexutil.Bytes(head.RandomReveal)
+		result["mixHash"] = head.MixHash
+	}
+
 	return result
 }
 
@@ -270,7 +275,7 @@ func (api *PublicFilterAPI) NewHeads(ctx context.Context) (*rpc.Subscription, er
 		for {
 			select {
 			case h := <-headers:
-				header := RPCMarshalHeader(h, api.backend.ChainConfig().IsEthTxTypeForkEnabled(h.Number))
+				header := RPCMarshalHeader(h, api.backend.ChainConfig().IsEthTxTypeForkEnabled(h.Number), api.backend.ChainConfig().IsRandaoForkEnabled(h.Number))
 				notifier.Notify(rpcSub.ID, header)
 			case <-rpcSub.Err():
 				headersSub.Unsubscribe()

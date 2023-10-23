@@ -39,6 +39,8 @@ import (
 	istanbulCore "github.com/klaytn/klaytn/consensus/istanbul/core"
 	"github.com/klaytn/klaytn/consensus/istanbul/validator"
 	"github.com/klaytn/klaytn/consensus/misc"
+	"github.com/klaytn/klaytn/crypto"
+	"github.com/klaytn/klaytn/crypto/bls"
 	"github.com/klaytn/klaytn/crypto/sha3"
 	"github.com/klaytn/klaytn/networks/rpc"
 	"github.com/klaytn/klaytn/params"
@@ -65,6 +67,11 @@ var (
 	// errInvalidSignature is returned when given signature is not signed by given
 	// address.
 	errInvalidSignature = errors.New("invalid signature")
+	// errInvalidBlsSignature is returned when given bls signature is not signed by given
+	// address.
+	errInvalidBlsSignature = errors.New("invalid bls signature")
+	// errInvalidMixHash is returned when given mix hash is not correctly calculated.
+	errInvalidMixHash = errors.New("invalid mix hash")
 	// errUnknownBlock is returned when the list of validators is requested for a block
 	// that is not part of the local blockchain.
 	errUnknownBlock = errors.New("unknown block")
@@ -262,7 +269,37 @@ func (sb *backend) verifyCascadingFields(chain consensus.ChainReader, header *ty
 			return err
 		}
 	}
+
+	// Verify the randao header fields
+	if chain.Config().IsRandaoForkEnabled(header.Number) {
+		if err := sb.verifyRandaoFields(header.Number, header, parent); err != nil {
+			return err
+		}
+	}
 	return sb.verifyCommittedSeals(chain, header, parents)
+}
+
+func (sb *backend) verifyRandaoFields(number *big.Int, header, parent *types.Header) error {
+	proposer, err := ecrecover(header)
+	if err != nil {	
+		return err
+	}
+	compressedPubKey, err := sb.getBlsPubKey(number, proposer)
+	if err != nil {
+		return err
+	}
+	pubKey, err := bls.PublicKeyFromBytes(compressedPubKey)
+	if err != nil {
+		return err
+	}
+
+	if err := sb.VerifyRandomReveal(number, header.RandomReveal, pubKey); err != nil {
+		return err
+	}
+	if err := sb.VerifyMixHash(header.RandomReveal, header.MixHash, parent.MixHash); err != nil {
+		return err
+	}
+	return nil
 }
 
 // VerifyHeaders is similar to VerifyHeader, but verifies a batch of headers
@@ -441,6 +478,17 @@ func (sb *backend) Prepare(chain consensus.ChainReader, header *types.Header) er
 		header.Time = big.NewInt(t.Unix())
 		header.TimeFoS = uint8((t.UnixNano() / 1000 / 1000 / 10) % 100)
 	}
+
+	if chain.Config().IsRandaoForkEnabled(header.Number) {
+		header.RandomReveal = sb.CalcRandomReveal(header.Number)
+		mixHash := common.Hash{}
+		if chain.Config().RandaoCompatibleBlock.Cmp(header.Number) == 0 {
+			mixHash = sb.CalcMixHash(crypto.Keccak256(header.RandomReveal), common.Hash{})
+		} else {
+			mixHash = sb.CalcMixHash(crypto.Keccak256(header.RandomReveal), parent.MixHash)
+		}
+		header.MixHash = mixHash
+	}
 	return nil
 }
 
@@ -461,6 +509,16 @@ func (sb *backend) Finalize(chain consensus.ChainReader, header *types.Header, s
 	} else if header.BaseFee != nil {
 		logger.Error("A block before Magma hardfork shouldn't have baseFee", "blockNum", header.Number.Uint64())
 		return nil, consensus.ErrInvalidBaseFee
+	}
+	// We can assure that if the randao hard forked block should have randao fields
+	if chain.Config().IsRandaoForkEnabled(header.Number) {
+		if len(header.RandomReveal) == 0 || header.MixHash == (common.Hash{}) {
+			logger.Error("Randao hard forked block should have randao fields", "blockNum", header.Number.Uint64())
+			return nil, errors.New("Invalid Randao block without randao fields")
+		}
+	} else if len(header.RandomReveal) != 0 || header.MixHash != (common.Hash{}) {
+		logger.Error("A block before Randao hardfork shouldn't have randao fields", "blockNum", header.Number.Uint64())
+		return nil, consensus.ErrInvalidRandaoFields
 	}
 
 	var rewardSpec *reward.RewardSpec

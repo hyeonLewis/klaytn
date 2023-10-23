@@ -28,7 +28,9 @@ import (
 	"time"
 
 	lru "github.com/hashicorp/golang-lru"
+	"github.com/klaytn/klaytn/accounts/abi/bind/backends"
 	"github.com/klaytn/klaytn/blockchain"
+	"github.com/klaytn/klaytn/blockchain/system"
 	"github.com/klaytn/klaytn/blockchain/types"
 	"github.com/klaytn/klaytn/common"
 	"github.com/klaytn/klaytn/consensus"
@@ -36,6 +38,7 @@ import (
 	istanbulCore "github.com/klaytn/klaytn/consensus/istanbul/core"
 	"github.com/klaytn/klaytn/consensus/istanbul/validator"
 	"github.com/klaytn/klaytn/crypto"
+	"github.com/klaytn/klaytn/crypto/bls"
 	"github.com/klaytn/klaytn/event"
 	"github.com/klaytn/klaytn/governance"
 	"github.com/klaytn/klaytn/log"
@@ -50,7 +53,7 @@ const (
 
 var logger = log.NewModuleLogger(log.ConsensusIstanbulBackend)
 
-func New(rewardbase common.Address, config *istanbul.Config, privateKey *ecdsa.PrivateKey, db database.DBManager, governance governance.Engine, nodetype common.ConnType) consensus.Istanbul {
+func New(rewardbase common.Address, config *istanbul.Config, privateKey *ecdsa.PrivateKey, blsSecretKey bls.SecretKey, db database.DBManager, governance governance.Engine, nodetype common.ConnType) consensus.Istanbul {
 	recents, _ := lru.NewARC(inmemorySnapshots)
 	recentMessages, _ := lru.NewARC(inmemoryPeers)
 	knownMessages, _ := lru.NewARC(inmemoryMessages)
@@ -59,6 +62,7 @@ func New(rewardbase common.Address, config *istanbul.Config, privateKey *ecdsa.P
 		istanbulEventMux:  new(event.TypeMux),
 		privateKey:        privateKey,
 		address:           crypto.PubkeyToAddress(privateKey.PublicKey),
+		blsSecretKey: 	   blsSecretKey,
 		logger:            logger.NewWith(),
 		db:                db,
 		commitCh:          make(chan *types.Result, 1),
@@ -84,6 +88,7 @@ type backend struct {
 	istanbulEventMux *event.TypeMux
 	privateKey       *ecdsa.PrivateKey
 	address          common.Address
+	blsSecretKey     bls.SecretKey
 	core             istanbulCore.Engine
 	logger           log.Logger
 	db               database.DBManager
@@ -349,6 +354,37 @@ func (sb *backend) Sign(data []byte) ([]byte, error) {
 	return crypto.Sign(hashData, sb.privateKey)
 }
 
+func (sb *backend) CalcRandomReveal(number *big.Int) []byte {
+	msg := common.BytesToHash(number.Bytes())
+	return bls.Sign(sb.blsSecretKey, msg.Bytes()).Marshal()
+}
+
+func (sb *backend) CalcMixHash(randomReveal []byte, prevMixHash common.Hash) common.Hash {
+	mixHash := [32]byte{}
+	// XORing the keccak256(randomReveal) with the mix hash
+	for i := 0; i < len(prevMixHash); i++ {
+		mixHash[i] = prevMixHash[i] ^ randomReveal[i]
+	}
+	return common.BytesToHash(mixHash[:])
+}
+
+func (sb *backend) VerifyRandomReveal(number *big.Int, randomReveal []byte, blsPubKey bls.PublicKey) error {
+	msg := common.BytesToHash(number.Bytes())
+	ok, err := bls.VerifySignature(randomReveal, msg, blsPubKey)
+	if !ok || (err != nil) {
+		return errInvalidBlsSignature
+	}
+	return nil
+}
+
+func (sb *backend) VerifyMixHash(randomReveal []byte, mixHash, prevMixHash common.Hash) error {
+	mixHash2 := sb.CalcMixHash(randomReveal, prevMixHash)
+	if mixHash != mixHash2 {
+		return errInvalidMixHash
+	}
+	return nil
+}
+
 // CheckSignature implements istanbul.Backend.CheckSignature
 func (sb *backend) CheckSignature(data []byte, address common.Address, sig []byte) error {
 	signer, err := cacheSignatureAddresses(data, sig)
@@ -401,6 +437,27 @@ func (sb *backend) getValidators(number uint64, hash common.Hash) istanbul.Valid
 			sb.chain)
 	}
 	return snap.ValSet
+}
+
+
+func (sb *backend) getBlsPubKey(number *big.Int, proposer common.Address) ([]byte, error) {
+	caller := backends.NewBlockchainContractBackend(sb.chain, nil, nil)
+	kip113Addr, err := system.ReadRegistryActiveAddr(caller, system.Kip113Name, number)
+	if err != nil {
+		return nil, err
+	}
+	// Get the bls public key from the registry contract
+	// In ReadKip113All, the public key is verified by bls.PopVerify
+	infos, err := system.ReadKip113All(caller, kip113Addr, number)
+	if err != nil {
+		return nil, err
+	}
+
+	if pubKey, ok := infos[proposer]; !ok {
+		return nil, errUnauthorized
+	} else {
+		return pubKey.PublicKey, nil
+	}
 }
 
 func (sb *backend) LastProposal() (istanbul.Proposal, common.Address) {

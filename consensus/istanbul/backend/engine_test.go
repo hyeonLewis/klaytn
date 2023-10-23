@@ -59,6 +59,9 @@ type (
 	EthTxTypeCompatibleBlock *big.Int
 	magmaCompatibleBlock     *big.Int
 	koreCompatibleBlock      *big.Int
+	shanghaiCompatibleBlock  *big.Int
+	cancunCompatibleBlock    *big.Int
+	randaoCompatibleBlock    *big.Int
 )
 
 type (
@@ -136,6 +139,12 @@ func newBlockChain(n int, items ...interface{}) (*blockchain.BlockChain, *backen
 			genesis.Config.MagmaCompatibleBlock = v
 		case koreCompatibleBlock:
 			genesis.Config.KoreCompatibleBlock = v
+		case shanghaiCompatibleBlock:
+			genesis.Config.ShanghaiCompatibleBlock = v
+		case cancunCompatibleBlock:
+			genesis.Config.CancunCompatibleBlock = v
+		case randaoCompatibleBlock:
+			genesis.Config.RandaoCompatibleBlock = v
 		case proposerPolicy:
 			genesis.Config.Istanbul.ProposerPolicy = uint64(v)
 		case epoch:
@@ -285,6 +294,47 @@ func TestPrepare(t *testing.T) {
 		t.Errorf("error mismatch: have %v, want %v", err, consensus.ErrUnknownAncestor)
 	}
 }
+
+func TestRandaoPrepare(t *testing.T) {
+	var configItems []interface{}
+	configItems = append(configItems, istanbulCompatibleBlock(new(big.Int).SetUint64(0)))
+	configItems = append(configItems, LondonCompatibleBlock(new(big.Int).SetUint64(0)))
+	configItems = append(configItems, EthTxTypeCompatibleBlock(new(big.Int).SetUint64(0)))
+	configItems = append(configItems, magmaCompatibleBlock(new(big.Int).SetUint64(0)))
+	configItems = append(configItems, koreCompatibleBlock(new(big.Int).SetUint64(0)))
+	configItems = append(configItems, shanghaiCompatibleBlock(new(big.Int).SetUint64(0)))
+	configItems = append(configItems, cancunCompatibleBlock(new(big.Int).SetUint64(0)))
+	configItems = append(configItems, randaoCompatibleBlock(new(big.Int).SetUint64(0)))
+	
+	chain, engine := newBlockChain(1, configItems...)
+	defer engine.Stop()
+
+	header := makeHeader(chain.Genesis(), engine.config)
+
+	beforeRandomReveal := header.RandomReveal
+	beforeMixHash := header.MixHash
+	if len(beforeRandomReveal) != 0 {
+		t.Errorf("random reveal have value before prepare: %v", beforeRandomReveal)
+	}
+	if beforeMixHash != (common.Hash{}) {
+		t.Errorf("mix hash have value before prepare: %v", beforeMixHash)
+	}
+
+	err := engine.Prepare(chain, header)
+	if err != nil {
+		t.Errorf("error mismatch: have %v, want nil", err)
+	}
+
+	afterRandomReveal := header.RandomReveal
+	afterMixHash := header.MixHash
+	if len(afterRandomReveal) != 96 {
+		t.Errorf("random reveal should have value after prepare: %v", beforeRandomReveal)
+	}
+	if afterMixHash == (common.Hash{}) {
+		t.Errorf("mix hash should have value after prepare: %v", beforeMixHash)
+	}
+}
+
 
 func TestSealStopChannel(t *testing.T) {
 	chain, engine := newBlockChain(4)

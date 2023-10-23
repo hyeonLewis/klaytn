@@ -154,3 +154,40 @@ func TestNodeKeyPersistency(t *testing.T) {
 		}
 	*/
 }
+
+// Tests that bls node keys can be correctly created, persisted, loaded and/or made
+// ephemeral.
+func TestBlsNodeKeyPersistency(t *testing.T) {
+	// Create a temporary folder and make sure no key is present
+	dir, err := os.MkdirTemp("", "node-test")
+	if err != nil {
+		t.Fatalf("failed to create temporary data directory: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	keyfile := filepath.Join(dir, "unit-test", datadirBlsSecretKey)
+
+	// bls node key is generated and stored in the keyfile
+	config := &Config{Name: "unit-test", DataDir: dir}
+	config.BlsNodeKey()
+	if _, err := os.Stat(keyfile); err != nil {
+		t.Fatalf("node key not persisted to data directory: %v", err)
+	}
+	if _, err = config.loadBlsNodeKey(keyfile); err != nil {
+		t.Fatalf("failed to load freshly persisted node key: %v", err)
+	}
+	blob1, err := os.ReadFile(keyfile)
+	if err != nil {
+		t.Fatalf("failed to read freshly persisted node key: %v", err)
+	}
+
+	// Configure a new node and ensure the previously persisted bls key is loaded
+	config = &Config{Name: "unit-test", DataDir: dir}
+	blob2, err := os.ReadFile(filepath.Join(keyfile))
+	if err != nil {
+		t.Fatalf("failed to read previously persisted node key: %v", err)
+	}
+	if !bytes.Equal(blob1, blob2) {
+		t.Fatalf("persisted node key mismatch: have %x, want %x", blob2, blob1)
+	}
+}

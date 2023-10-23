@@ -37,4 +37,7 @@ var (
 
 	// ErrInvalidBaseFee is returned if a block before fork has a base fee field, not nil
 	ErrInvalidBaseFee = errors.New("invalid baseFee before fork")
+
+	// ErrInvalidRandaoFields is returned if a block's randao fields are invalid.
+	ErrInvalidRandaoFields = errors.New("invalid randao fields")
 )

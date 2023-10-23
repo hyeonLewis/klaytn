@@ -22,6 +22,7 @@ package node
 
 import (
 	"crypto/ecdsa"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -32,6 +33,7 @@ import (
 	"github.com/klaytn/klaytn/accounts/keystore"
 	"github.com/klaytn/klaytn/common"
 	"github.com/klaytn/klaytn/crypto"
+	"github.com/klaytn/klaytn/crypto/bls"
 	"github.com/klaytn/klaytn/log"
 	"github.com/klaytn/klaytn/networks/p2p"
 	"github.com/klaytn/klaytn/networks/p2p/discover"
@@ -41,6 +43,7 @@ import (
 
 const (
 	datadirPrivateKey      = "nodekey"            // Path within the datadir to the node's private key
+	datadirBlsSecretKey	   = "bls-nodekey"             // Path within the datadir to the node's bls secret key
 	datadirDefaultKeyStore = "keystore"           // Path within the datadir to the keystore
 	datadirStaticNodes     = "static-nodes.json"  // Path within the datadir to the static node list
 	datadirTrustedNodes    = "trusted-nodes.json" // Path within the datadir to the trusted node list
@@ -370,6 +373,47 @@ func (c *Config) NodeKey() *ecdsa.PrivateKey {
 		logger.Crit("Failed to persist node key", "err", err)
 	}
 	return key
+}
+
+func (c *Config) BlsNodeKey() bls.SecretKey {
+	keyfile := c.ResolvePath(datadirBlsSecretKey)
+	if key, err := c.loadBlsNodeKey(keyfile); err == nil {
+		return key
+	}
+	
+	// No persistent key found, generate and store a new one.
+	ecPriv := c.NodeKey()
+	key, err := bls.GenerateKey(crypto.FromECDSA(ecPriv))
+	if err != nil {
+		logger.Crit("Failed to generate bls node key", "err", err)
+	}
+	instanceDir := filepath.Join(c.DataDir, c.name())
+	if err := os.MkdirAll(instanceDir, 0o700); err != nil {
+		logger.Crit("Failed to make dir to persist bls node key", "err", err)
+	}
+	keyfile = filepath.Join(instanceDir, datadirBlsSecretKey)
+	if err := os.WriteFile(keyfile, []byte(hex.EncodeToString(key.Marshal())), 0o600); err != nil {
+		logger.Crit("Failed to persist bls node key", "err", err)
+	}
+	return key
+}
+
+func (c *Config) loadBlsNodeKey(file string) (bls.SecretKey, error) {
+	content, err := os.ReadFile(file)
+	if err != nil {
+		return nil, err
+	}
+	str := strings.TrimSpace(string(content))
+	blsBytes, err := hex.DecodeString(str)
+	if err != nil {
+		return nil, err
+	}
+	
+	if blsKey, err := bls.SecretKeyFromBytes(blsBytes); err != nil {
+		return nil, err
+	} else {
+		return blsKey, nil
+	}
 }
 
 // StaticNodes returns a list of node enode URLs configured as static nodes.

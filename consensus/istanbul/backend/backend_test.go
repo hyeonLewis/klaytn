@@ -35,6 +35,7 @@ import (
 	"github.com/klaytn/klaytn/consensus/istanbul"
 	"github.com/klaytn/klaytn/consensus/istanbul/validator"
 	"github.com/klaytn/klaytn/crypto"
+	"github.com/klaytn/klaytn/crypto/bls"
 	"github.com/klaytn/klaytn/governance"
 	"github.com/klaytn/klaytn/params"
 	"github.com/klaytn/klaytn/storage/database"
@@ -428,6 +429,7 @@ var (
 		{Sequence: 99, Round: 4}:  false,
 		{Sequence: 99, Round: 14}: false,
 	}
+	blsPubKey = []byte{}
 )
 
 type keys []*ecdsa.PrivateKey
@@ -823,7 +825,10 @@ func newTestBackendWithConfig(chainConfig *params.ChainConfig, blockPeriod uint6
 	istanbulConfig.Epoch = chainConfig.Istanbul.Epoch
 	istanbulConfig.SubGroupSize = chainConfig.Istanbul.SubGroupSize
 
-	backend := New(getTestRewards()[0], istanbulConfig, key, dbm, gov, common.CONSENSUSNODE).(*backend)
+	blsKey, _ := bls.GenerateKey(crypto.FromECDSA(key))
+	blsPubKey = blsKey.PublicKey().Marshal()
+
+	backend := New(getTestRewards()[0], istanbulConfig, key, blsKey, dbm, gov, common.CONSENSUSNODE).(*backend)
 	gov.SetNodeAddress(crypto.PubkeyToAddress(key.PublicKey))
 	return backend
 }
@@ -880,6 +885,52 @@ func TestCheckSignature(t *testing.T) {
 
 	if err := b.CheckSignature(testSigningData, testInvalidAddr, sig); err != errInvalidSignature {
 		t.Errorf("error mismatch: have %v, want %v", err, errInvalidSignature)
+	}
+}
+
+func TestRandomReveal(t *testing.T) {
+	b := newTestBackend()
+
+	sig := b.CalcRandomReveal(common.Big1)
+
+	if (len(sig) != 96) {
+		t.Errorf("signature length mismatch: have %d, want 96", len(sig))
+	}
+
+	// Check signature recover
+	pubKey, _ := bls.PublicKeyFromBytes(blsPubKey)
+	err := b.VerifyRandomReveal(common.Big1, sig, pubKey)
+
+	if err != nil {
+		t.Errorf("fail to verify bls signature: %v", err)
+	}
+}
+
+func TestMixHash(t *testing.T) {
+	b := newTestBackend()
+
+	sig := b.CalcRandomReveal(common.Big1)
+	sig = crypto.Keccak256(sig)
+	prevMixHash := common.Hash{}
+	for i := 0; i < len(sig); i++ {
+		if i%2 == 0 {
+			prevMixHash[i] = sig[i]
+		} else {
+			prevMixHash[i] = 0x00
+		}
+	}
+
+	mixHash := b.CalcMixHash(sig, prevMixHash)
+	for i := 0; i < len(sig); i++ {
+		if i%2 == 0 {
+			if mixHash[i] != 0x00 {
+				t.Errorf("mixHash miscalculated")
+			}
+		} else {
+			if mixHash[i] != sig[i] {
+				t.Errorf("mixHash miscalculated")
+			}
+		}
 	}
 }
 

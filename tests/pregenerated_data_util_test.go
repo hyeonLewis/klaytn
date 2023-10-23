@@ -375,7 +375,7 @@ func NewBCDataForPreGeneratedTest(testDataDir string, tc *preGeneratedTC) (*BCDa
 
 	////////////////////////////////////////////////////////////////////////////////
 	// Setup istanbul consensus backend
-	engine := istanbulBackend.New(genesisAddr, istanbul.DefaultConfig, validatorPrivKeys[0], chainDB, gov, common.CONSENSUSNODE)
+	engine := istanbulBackend.New(genesisAddr, istanbul.DefaultConfig, validatorPrivKeys[0], nil, chainDB, gov, common.CONSENSUSNODE)
 
 	////////////////////////////////////////////////////////////////////////////////
 	// Make a blockChain

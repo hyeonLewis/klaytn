@@ -172,7 +172,7 @@ func (s *PublicKlayAPI) ForkStatus(ctx context.Context, number rpc.BlockNumber) 
 
 // rpcMarshalHeader converts the given header to the RPC output.
 func (s *PublicBlockChainAPI) rpcMarshalHeader(header *types.Header) map[string]interface{} {
-	fields := filters.RPCMarshalHeader(header, s.b.ChainConfig().IsEthTxTypeForkEnabled(header.Number))
+	fields := filters.RPCMarshalHeader(header, s.b.ChainConfig().IsEthTxTypeForkEnabled(header.Number), s.b.ChainConfig().IsRandaoForkEnabled(header.Number))
 	return fields
 }
 

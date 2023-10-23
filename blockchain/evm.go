@@ -52,6 +52,7 @@ func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common
 		beneficiary common.Address
 		rewardBase  common.Address
 		baseFee     *big.Int
+		mixHash    common.Hash
 	)
 
 	if author == nil {
@@ -69,6 +70,9 @@ func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common
 		baseFee = new(big.Int).SetUint64(params.ZeroBaseFee)
 	}
 
+	// before randao hardfork, header.MixHash is zero hash
+	mixHash = header.MixHash
+
 	return vm.BlockContext{
 		CanTransfer: CanTransfer,
 		Transfer:    Transfer,
@@ -79,6 +83,7 @@ func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common
 		Time:        new(big.Int).Set(header.Time),
 		BlockScore:  new(big.Int).Set(header.BlockScore),
 		BaseFee:     baseFee,
+		MixHash:     mixHash,
 	}
 }
 
