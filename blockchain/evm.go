@@ -52,7 +52,7 @@ func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common
 		beneficiary common.Address
 		rewardBase  common.Address
 		baseFee     *big.Int
-		mixHash    common.Hash
+		mixHash     *common.Hash
 	)
 
 	if author == nil {

@@ -62,7 +62,7 @@ func New(rewardbase common.Address, config *istanbul.Config, privateKey *ecdsa.P
 		istanbulEventMux:  new(event.TypeMux),
 		privateKey:        privateKey,
 		address:           crypto.PubkeyToAddress(privateKey.PublicKey),
-		blsSecretKey: 	   blsSecretKey,
+		blsSecretKey:      blsSecretKey,
 		logger:            logger.NewWith(),
 		db:                db,
 		commitCh:          make(chan *types.Result, 1),
@@ -438,7 +438,6 @@ func (sb *backend) getValidators(number uint64, hash common.Hash) istanbul.Valid
 	}
 	return snap.ValSet
 }
-
 
 func (sb *backend) getBlsPubKey(number *big.Int, proposer common.Address) ([]byte, error) {
 	caller := backends.NewBlockchainContractBackend(sb.chain, nil, nil)

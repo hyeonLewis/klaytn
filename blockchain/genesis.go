@@ -339,8 +339,9 @@ func (g *Genesis) ToBlock(baseStateRoot common.Hash, db database.DBManager) *typ
 		}
 	}
 	if g.Config != nil && g.Config.IsRandaoForkEnabled(common.Big0) {
-		head.RandomReveal = make([]byte, 96)
-		head.MixHash = common.Hash{}
+		head.RandomReveal = new(hexutil.Bytes)
+		*head.RandomReveal = make([]byte, 96)
+		head.MixHash = new(common.Hash)
 	}
 
 	stateDB.Commit(false)

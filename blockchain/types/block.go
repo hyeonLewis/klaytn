@@ -65,22 +65,24 @@ type Header struct {
 
 	BaseFee *big.Int `json:"baseFeePerGas,omitempty"    rlp:"optional"`
 
-	RandomReveal []byte `json:"randomReveal,omitempty"  rlp:"optional"`
-	MixHash common.Hash `json:"mixHash,omitempty"       rlp:"optional"`
+	RandomReveal *hexutil.Bytes `json:"randomReveal,omitempty"  rlp:"optional"`
+	MixHash      *common.Hash   `json:"mixHash,omitempty"       rlp:"optional"`
 }
 
 // field type overrides for gencodec
 type headerMarshaling struct {
-	BlockScore *hexutil.Big
-	Number     *hexutil.Big
-	GasUsed    hexutil.Uint64
-	Time       *hexutil.Big
-	TimeFoS    hexutil.Uint
-	Extra      hexutil.Bytes
-	BaseFee    *hexutil.Big
-	Hash       common.Hash `json:"hash"` // adds call to Hash() in MarshalJSON
-	Governance hexutil.Bytes
-	Vote       hexutil.Bytes
+	BlockScore   *hexutil.Big
+	Number       *hexutil.Big
+	GasUsed      hexutil.Uint64
+	Time         *hexutil.Big
+	TimeFoS      hexutil.Uint
+	Extra        hexutil.Bytes
+	BaseFee      *hexutil.Big
+	RandomReveal *hexutil.Bytes
+	MixHash      *common.Hash
+	Hash         common.Hash `json:"hash"` // adds call to Hash() in MarshalJSON
+	Governance   hexutil.Bytes
+	Vote         hexutil.Bytes
 }
 
 // Hash returns the block hash of the header, which is simply the keccak256 hash of its
@@ -260,10 +262,11 @@ func CopyHeader(h *Header) *Header {
 		cpy.Vote = make([]byte, len(h.Vote))
 		copy(cpy.Vote, h.Vote)
 	}
-	if len(h.RandomReveal) > 0 {
+	if h.RandomReveal != nil {
 		// This field exists after Randao hardfork
-		cpy.RandomReveal = make([]byte, len(h.RandomReveal))
-		copy(cpy.RandomReveal, h.RandomReveal)
+		cpy.RandomReveal = new(hexutil.Bytes)
+		*cpy.RandomReveal = make([]byte, len(*h.RandomReveal))
+		copy(*cpy.RandomReveal, *h.RandomReveal)
 	}
 	return &cpy
 }
@@ -305,16 +308,16 @@ func (b *Block) BlockScore() *big.Int { return new(big.Int).Set(b.header.BlockSc
 func (b *Block) Time() *big.Int       { return new(big.Int).Set(b.header.Time) }
 func (b *Block) TimeFoS() uint8       { return b.header.TimeFoS }
 
-func (b *Block) NumberU64() uint64          { return b.header.Number.Uint64() }
-func (b *Block) Bloom() Bloom               { return b.header.Bloom }
-func (b *Block) Rewardbase() common.Address { return b.header.Rewardbase }
-func (b *Block) Root() common.Hash          { return b.header.Root }
-func (b *Block) ParentHash() common.Hash    { return b.header.ParentHash }
-func (b *Block) TxHash() common.Hash        { return b.header.TxHash }
-func (b *Block) ReceiptHash() common.Hash   { return b.header.ReceiptHash }
-func (b *Block) Extra() []byte              { return common.CopyBytes(b.header.Extra) }
-func (b *Block) RandomReveal() []byte 		{ return common.CopyBytes(b.header.RandomReveal) }
-func (b *Block) MixHash() common.Hash 		{ return b.header.MixHash }
+func (b *Block) NumberU64() uint64            { return b.header.Number.Uint64() }
+func (b *Block) Bloom() Bloom                 { return b.header.Bloom }
+func (b *Block) Rewardbase() common.Address   { return b.header.Rewardbase }
+func (b *Block) Root() common.Hash            { return b.header.Root }
+func (b *Block) ParentHash() common.Hash      { return b.header.ParentHash }
+func (b *Block) TxHash() common.Hash          { return b.header.TxHash }
+func (b *Block) ReceiptHash() common.Hash     { return b.header.ReceiptHash }
+func (b *Block) Extra() []byte                { return common.CopyBytes(b.header.Extra) }
+func (b *Block) RandomReveal() *hexutil.Bytes { return b.header.RandomReveal }
+func (b *Block) MixHash() *common.Hash        { return b.header.MixHash }
 
 func (b *Block) Header() *Header { return CopyHeader(b.header) }
 
@@ -412,15 +415,7 @@ func (h *Header) String() string {
 	if h.BaseFee != nil {
 		strBaseHeader = strBaseHeader + `	BaseFee:          %x
 		`
-		if len(h.RandomReveal) == 0 {
-			strHeader = fmt.Sprintf(prefix+strBaseHeader+suffix, h.Hash(), h.ParentHash, h.Rewardbase, h.Root, h.TxHash, h.ReceiptHash, h.Bloom, h.BlockScore, h.Number, h.GasUsed, h.Time, h.TimeFoS, h.Extra, h.Governance, h.Vote, h.BaseFee)
-		} else {
-			strBaseHeader = strBaseHeader + 
-			`	RandomReveal:     %x
-				MixHash:          %x
-			`
-			strHeader = fmt.Sprintf(prefix+strBaseHeader+suffix, h.Hash(), h.ParentHash, h.Rewardbase, h.Root, h.TxHash, h.ReceiptHash, h.Bloom, h.BlockScore, h.Number, h.GasUsed, h.Time, h.TimeFoS, h.Extra, h.Governance, h.Vote, h.BaseFee, h.RandomReveal, h.MixHash)
-		}
+		strHeader = fmt.Sprintf(prefix+strBaseHeader+suffix, h.Hash(), h.ParentHash, h.Rewardbase, h.Root, h.TxHash, h.ReceiptHash, h.Bloom, h.BlockScore, h.Number, h.GasUsed, h.Time, h.TimeFoS, h.Extra, h.Governance, h.Vote, h.BaseFee)
 	} else {
 		strHeader = fmt.Sprintf(prefix+strBaseHeader+suffix, h.Hash(), h.ParentHash, h.Rewardbase, h.Root, h.TxHash, h.ReceiptHash, h.Bloom, h.BlockScore, h.Number, h.GasUsed, h.Time, h.TimeFoS, h.Extra, h.Governance, h.Vote)
 	}

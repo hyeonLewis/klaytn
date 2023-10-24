@@ -281,7 +281,7 @@ func (sb *backend) verifyCascadingFields(chain consensus.ChainReader, header *ty
 
 func (sb *backend) verifyRandaoFields(number *big.Int, header, parent *types.Header) error {
 	proposer, err := ecrecover(header)
-	if err != nil {	
+	if err != nil {
 		return err
 	}
 	compressedPubKey, err := sb.getBlsPubKey(number, proposer)
@@ -293,10 +293,10 @@ func (sb *backend) verifyRandaoFields(number *big.Int, header, parent *types.Hea
 		return err
 	}
 
-	if err := sb.VerifyRandomReveal(number, header.RandomReveal, pubKey); err != nil {
+	if err := sb.VerifyRandomReveal(number, *header.RandomReveal, pubKey); err != nil {
 		return err
 	}
-	if err := sb.VerifyMixHash(header.RandomReveal, header.MixHash, parent.MixHash); err != nil {
+	if err := sb.VerifyMixHash(*header.RandomReveal, *header.MixHash, *parent.MixHash); err != nil {
 		return err
 	}
 	return nil
@@ -480,14 +480,15 @@ func (sb *backend) Prepare(chain consensus.ChainReader, header *types.Header) er
 	}
 
 	if chain.Config().IsRandaoForkEnabled(header.Number) {
-		header.RandomReveal = sb.CalcRandomReveal(header.Number)
+		header.RandomReveal = new(hexutil.Bytes)
+		*header.RandomReveal = sb.CalcRandomReveal(header.Number)
 		mixHash := common.Hash{}
 		if chain.Config().RandaoCompatibleBlock.Cmp(header.Number) == 0 {
-			mixHash = sb.CalcMixHash(crypto.Keccak256(header.RandomReveal), common.Hash{})
+			mixHash = sb.CalcMixHash(crypto.Keccak256(*header.RandomReveal), common.Hash{})
 		} else {
-			mixHash = sb.CalcMixHash(crypto.Keccak256(header.RandomReveal), parent.MixHash)
+			mixHash = sb.CalcMixHash(crypto.Keccak256(*header.RandomReveal), *parent.MixHash)
 		}
-		header.MixHash = mixHash
+		header.MixHash = &mixHash
 	}
 	return nil
 }
@@ -512,11 +513,11 @@ func (sb *backend) Finalize(chain consensus.ChainReader, header *types.Header, s
 	}
 	// We can assure that if the randao hard forked block should have randao fields
 	if chain.Config().IsRandaoForkEnabled(header.Number) {
-		if len(header.RandomReveal) == 0 || header.MixHash == (common.Hash{}) {
+		if header.RandomReveal == nil || header.MixHash == nil {
 			logger.Error("Randao hard forked block should have randao fields", "blockNum", header.Number.Uint64())
 			return nil, errors.New("Invalid Randao block without randao fields")
 		}
-	} else if len(header.RandomReveal) != 0 || header.MixHash != (common.Hash{}) {
+	} else if header.RandomReveal != nil || header.MixHash != nil {
 		logger.Error("A block before Randao hardfork shouldn't have randao fields", "blockNum", header.Number.Uint64())
 		return nil, consensus.ErrInvalidRandaoFields
 	}

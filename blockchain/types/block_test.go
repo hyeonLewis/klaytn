@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/klaytn/klaytn/common"
+	"github.com/klaytn/klaytn/common/hexutil"
 	"github.com/klaytn/klaytn/rlp"
 )
 
@@ -61,8 +62,11 @@ func genMagmaHeader() *Header {
 func genRandaoHeader() *Header {
 	header := genMagmaHeader()
 
-	header.RandomReveal = common.FromHex("94516a8bc695b5bf43aa077cd682d9475a3a6bed39a633395b78ed8f276e7c5bb00bb26a77825013c6718579f1b3ee2275b158801705ea77989e3acc849ee9c524bd1822bde3cba7be2aae04347f0d91508b7b7ce2f11ec36cbf763173421ae7")
-	header.MixHash = common.BytesToHash(common.FromHex("df117d1245dceaae0a47f05371b23cd0d0db963ff9d5c8ba768dc989f4c31883"))
+	header.RandomReveal = new(hexutil.Bytes)
+	*header.RandomReveal = common.FromHex("94516a8bc695b5bf43aa077cd682d9475a3a6bed39a633395b78ed8f276e7c5bb00bb26a77825013c6718579f1b3ee2275b158801705ea77989e3acc849ee9c524bd1822bde3cba7be2aae04347f0d91508b7b7ce2f11ec36cbf763173421ae7")
+
+	mixHash := common.HexToHash("df117d1245dceaae0a47f05371b23cd0d0db963ff9d5c8ba768dc989f4c31883")
+	header.MixHash = &mixHash
 
 	return header
 }
@@ -551,7 +555,7 @@ func TestEIP1559BlockEncoding(t *testing.T) {
 
 func TestHeaderSizeCalc(t *testing.T) {
 	h := genMagmaHeader()
-	expectedSize := common.StorageSize(1183)
+	expectedSize := common.StorageSize(1199)
 	assert.Equal(t, expectedSize, h.Size())
 
 	govSize := common.StorageSize(len(h.Governance))
@@ -569,6 +573,12 @@ func TestHeaderSizeCalc(t *testing.T) {
 	extraSize := common.StorageSize(len(h.Extra))
 	h.Extra = nil
 	assert.Equal(t, expectedSize-govSize-voteSize-baseFeeSize-extraSize, h.Size())
+}
+
+func TestHeaderCopy(t *testing.T) {
+	h := genRandaoBlock()
+	copied := CopyHeader(h.Header())
+	assert.Equal(t, h.Header(), copied)
 }
 
 func BenchmarkBlockEncodingHashWithInterface(b *testing.B) {

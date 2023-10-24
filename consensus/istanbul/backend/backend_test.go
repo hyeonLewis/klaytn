@@ -893,14 +893,13 @@ func TestRandomReveal(t *testing.T) {
 
 	sig := b.CalcRandomReveal(common.Big1)
 
-	if (len(sig) != 96) {
+	if len(sig) != 96 {
 		t.Errorf("signature length mismatch: have %d, want 96", len(sig))
 	}
 
 	// Check signature recover
 	pubKey, _ := bls.PublicKeyFromBytes(blsPubKey)
 	err := b.VerifyRandomReveal(common.Big1, sig, pubKey)
-
 	if err != nil {
 		t.Errorf("fail to verify bls signature: %v", err)
 	}

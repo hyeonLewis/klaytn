@@ -305,7 +305,7 @@ func TestRandaoPrepare(t *testing.T) {
 	configItems = append(configItems, shanghaiCompatibleBlock(new(big.Int).SetUint64(0)))
 	configItems = append(configItems, cancunCompatibleBlock(new(big.Int).SetUint64(0)))
 	configItems = append(configItems, randaoCompatibleBlock(new(big.Int).SetUint64(0)))
-	
+
 	chain, engine := newBlockChain(1, configItems...)
 	defer engine.Stop()
 
@@ -313,10 +313,10 @@ func TestRandaoPrepare(t *testing.T) {
 
 	beforeRandomReveal := header.RandomReveal
 	beforeMixHash := header.MixHash
-	if len(beforeRandomReveal) != 0 {
+	if beforeRandomReveal != nil {
 		t.Errorf("random reveal have value before prepare: %v", beforeRandomReveal)
 	}
-	if beforeMixHash != (common.Hash{}) {
+	if beforeMixHash != nil {
 		t.Errorf("mix hash have value before prepare: %v", beforeMixHash)
 	}
 
@@ -327,14 +327,13 @@ func TestRandaoPrepare(t *testing.T) {
 
 	afterRandomReveal := header.RandomReveal
 	afterMixHash := header.MixHash
-	if len(afterRandomReveal) != 96 {
-		t.Errorf("random reveal should have value after prepare: %v", beforeRandomReveal)
+	if afterRandomReveal == nil || len(*afterRandomReveal) != 96 {
+		t.Errorf("random reveal should have value after prepare: %v", afterRandomReveal)
 	}
-	if afterMixHash == (common.Hash{}) {
-		t.Errorf("mix hash should have value after prepare: %v", beforeMixHash)
+	if afterMixHash == nil || len(*afterMixHash) != 32 {
+		t.Errorf("mix hash should have value after prepare: %v", afterMixHash)
 	}
 }
-
 
 func TestSealStopChannel(t *testing.T) {
 	chain, engine := newBlockChain(4)
