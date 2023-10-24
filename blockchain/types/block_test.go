@@ -58,6 +58,15 @@ func genMagmaHeader() *Header {
 	return header
 }
 
+func genRandaoHeader() *Header {
+	header := genMagmaHeader()
+
+	header.RandomReveal = common.FromHex("94516a8bc695b5bf43aa077cd682d9475a3a6bed39a633395b78ed8f276e7c5bb00bb26a77825013c6718579f1b3ee2275b158801705ea77989e3acc849ee9c524bd1822bde3cba7be2aae04347f0d91508b7b7ce2f11ec36cbf763173421ae7")
+	header.MixHash = common.BytesToHash(common.FromHex("df117d1245dceaae0a47f05371b23cd0d0db963ff9d5c8ba768dc989f4c31883"))
+
+	return header
+}
+
 func genBlock() *Block {
 	return &Block{
 		header:       genHeader(),
@@ -68,6 +77,13 @@ func genBlock() *Block {
 func genMagmaBlock() *Block {
 	return &Block{
 		header:       genMagmaHeader(),
+		transactions: Transactions{},
+	}
+}
+
+func genRandaoBlock() *Block {
+	return &Block{
+		header:       genRandaoHeader(),
 		transactions: Transactions{},
 	}
 }
@@ -301,6 +317,95 @@ func TestMagmaBlockEncoding(t *testing.T) {
 	check("Extra", block.Extra(), b.Extra())
 	check("Hash", block.Hash(), b.Hash())
 	check("BaseFee", block.header.BaseFee, b.Header().BaseFee)
+	check("Size", block.Size(), common.StorageSize(len(blockEnc)))
+
+	// Create legacy tx.
+	to := common.HexToAddress("095e7baea6a6c7c4c2dfeb977efac326af552d87")
+	tx1 := NewTx(&TxInternalDataLegacy{
+		AccountNonce: 0,
+		Recipient:    &to,
+		Amount:       big.NewInt(10),
+		GasLimit:     50000,
+		Price:        big.NewInt(10),
+	})
+	sig := common.Hex2Bytes("9bea4c4daac7c7c52e093e6a4c35dbbcf8856f1af7b059ba20253e70848d094f8a8fae537ce25ed8cb5af9adac3f141af69bd515bd2ba031522df09b97dd72b100")
+	tx1, _ = tx1.WithSignature(LatestSignerForChainID(big.NewInt(1)), sig)
+
+	// Create ACL tx.
+	addr := common.HexToAddress("0x0000000000000000000000000000000000000001")
+	tx2 := NewTx(&TxInternalDataEthereumAccessList{
+		ChainID:      big.NewInt(1),
+		AccountNonce: 0,
+		Recipient:    &to,
+		GasLimit:     123457,
+		Price:        big.NewInt(10),
+		AccessList:   AccessList{{Address: addr, StorageKeys: []common.Hash{{0}}}},
+	})
+	sig2 := common.Hex2Bytes("3dbacc8d0259f2508625e97fdfc57cd85fdd16e5821bc2c10bdd1a52649e8335476e10695b183a87b0aa292a7f4b78ef0c3fbe62aa2c42c84e1d9c3da159ef1401")
+	tx2, _ = tx2.WithSignature(LatestSignerForChainID(big.NewInt(1)), sig2)
+
+	// Create DynamicFee tx.
+	addr2 := common.HexToAddress("0x0000000000000000000000000000000000000002")
+	tx3 := NewTx(&TxInternalDataEthereumDynamicFee{
+		ChainID:      big.NewInt(1),
+		AccountNonce: 0,
+		Recipient:    &to,
+		GasLimit:     123457,
+		GasFeeCap:    big.NewInt(10),
+		GasTipCap:    big.NewInt(10),
+		AccessList:   AccessList{{Address: addr2, StorageKeys: []common.Hash{{0}}}},
+	})
+	sig3 := common.Hex2Bytes("3dbacc8d0259f2508625e97fdfc57cd85fdd16e5821bc2c10bdd1a52649e8335476e10695b183a87b0aa292a7f4b78ef0c3fbe62aa2c42c84e1d9c3da159ef1401")
+	tx3, _ = tx3.WithSignature(LatestSignerForChainID(big.NewInt(1)), sig3)
+
+	check("len(Transactions)", len(block.Transactions()), 3)
+	check("Transactions[0].Hash", block.Transactions()[0].Hash(), tx1.Hash())
+	check("Transactions[1].Hash", block.Transactions()[1].Hash(), tx2.Hash())
+	check("Transactions[1].Type()", block.Transactions()[1].Type(), TxType(TxTypeEthereumAccessList))
+	check("Transactions[2].Hash", block.Transactions()[2].Hash(), tx3.Hash())
+	check("Transactions[2].Type()", block.Transactions()[2].Type(), TxType(TxTypeEthereumDynamicFee))
+
+	ourBlockEnc, err := rlp.EncodeToBytes(&block)
+	temp := common.Bytes2Hex(ourBlockEnc)
+	t.Log(temp)
+	if err != nil {
+		t.Fatal("encode error: ", err)
+	}
+	if !bytes.Equal(ourBlockEnc, blockEnc) {
+		t.Errorf("encoded block mismatch:\ngot:  %x\nwant: %x", ourBlockEnc, blockEnc)
+	}
+}
+
+func TestRandaoBlockEncoding(t *testing.T) {
+	b := genRandaoBlock()
+
+	blockEnc := common.FromHex("f90661f904bba06e3826cd2407f01ceaad3cebc1235102001c0bb9a0f8c915ab2958303bc0972c945a0043070275d9f6054307ee7348bd660849d90fa0f412a15cb6477bd1b0e48e8fc2d101292a5c1bb9c0b78f7a1129fea4f865fb97a0f412a15cb6477bd1b0e48e8fc2d101292a5c1bb9c0b78f7a1129fea4f865fb99a0f412a15cb6477bd1b0e48e8fc2d101292a5c1bb9c0b78f7a1129fea4f865fba9b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006634313261313563623634373762643162306534386538666332643130313239326135633162623963306237386637613131323966656134663836356662613966343132613135636236343737626431623065343865386663326431303132393261356331626239633062373866376131313239666561346638363566626139663431326131356362363437376264316230653438653866633264313031323932613563316262396330623738663761313132396665613466383635666261390a0964845c5d1e9314b90187d7820404846b6c617988676f312e31302e33856c696e75780000000000000000f90164f854942525dbdbb7ed59b8e02a6c4d3fb2a75b8b07e25094718aabda0f016e6127db6575cf0a803da7d4087b94c9ead9f875f4adc261a4b5dc264ee58039f281a794d8408db804ab30691e984e8623e2edb4cba853dfb8419da17c0fe3fdecbc32f3a2fbedf8300693067d0f944014cf575076df888709b2057869f36edc299542be1372d2b582bd8dc8e2c220059270fa37b2a2fe287ffb00f8c9b841e8765ffc1bfda438115f9bfa912f39bcc2a286fdb67c71229c9fe4084db5dd942d2076e244a4faf915aeb51a5ea097706e5421e2a7985425d0f9d6fa446c378d00b8411511d9bbd78f6a8b2151406c3c5071bcbe7a452a2ad4eebe1f9a15494ef8ff3b63b41e033de9a02c48e640d51944d7d20a462f7785525c6b26c401177521808101b841c7abdfa3ef691e8a306c8fedc32ee6af44b2fc82b921358466db9948ffce42f221a6870e01eda5ab4f54b6ee68798631e2d46a090c76c8a5d507453acaec48c401b8deb8dc7b22676f7665726e696e676e6f6465223a22307865373333636234643237396461363936663330643437306638633034646563623534666362306432222c22676f7665726e616e63656d6f6465223a2273696e676c65222c22726577617264223a7b226d696e74696e67616d6f756e74223a393630303030303030303030303030303030302c22726174696f223a2233342f33332f3333227d2c22626674223a7b2265706f6368223a33303030302c22706f6c696379223a302c22737562223a32317d2c22756e69745072696365223a32353030303030303030307da2e194e733cb4d279da696f30d470f8c04decb54fcb0d28565706f63688533303030308505d21dba00b86094516a8bc695b5bf43aa077cd682d9475a3a6bed39a633395b78ed8f276e7c5bb00bb26a77825013c6718579f1b3ee2275b158801705ea77989e3acc849ee9c524bd1822bde3cba7be2aae04347f0d91508b7b7ce2f11ec36cbf763173421ae7a0df117d1245dceaae0a47f05371b23cd0d0db963ff9d5c8ba768dc989f4c31883f901a0f85f800a82c35094095e7baea6a6c7c4c2dfeb977efac326af552d870a8025a09bea4c4daac7c7c52e093e6a4c35dbbcf8856f1af7b059ba20253e70848d094fa08a8fae537ce25ed8cb5af9adac3f141af69bd515bd2ba031522df09b97dd72b17801f89b01800a8301e24194095e7baea6a6c7c4c2dfeb977efac326af552d878080f838f7940000000000000000000000000000000000000001e1a0000000000000000000000000000000000000000000000000000000000000000001a03dbacc8d0259f2508625e97fdfc57cd85fdd16e5821bc2c10bdd1a52649e8335a0476e10695b183a87b0aa292a7f4b78ef0c3fbe62aa2c42c84e1d9c3da159ef147802f89c01800a0a8301e24194095e7baea6a6c7c4c2dfeb977efac326af552d878080f838f7940000000000000000000000000000000000000002e1a0000000000000000000000000000000000000000000000000000000000000000001a03dbacc8d0259f2508625e97fdfc57cd85fdd16e5821bc2c10bdd1a52649e8335a0476e10695b183a87b0aa292a7f4b78ef0c3fbe62aa2c42c84e1d9c3da159ef14")
+	var block Block
+	if err := rlp.DecodeBytes(blockEnc, &block); err != nil {
+		t.Fatal("decode error: ", err)
+	}
+	check := func(f string, got, want interface{}) {
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%s mismatch: got %v, want %v", f, got, want)
+		}
+	}
+
+	check("ParentHash", block.ParentHash(), b.ParentHash())
+	check("Rewardbase", block.Rewardbase(), b.Rewardbase())
+	check("Root", block.Root(), b.Root())
+	check("TxHash", block.TxHash(), b.TxHash())
+	check("ReceiptHash", block.ReceiptHash(), b.ReceiptHash())
+	check("Bloom", block.Bloom(), b.Bloom())
+	check("BlockScore", block.BlockScore(), b.BlockScore())
+	check("NUmber", block.Number(), b.Number())
+	check("GasUsed", block.GasUsed(), b.GasUsed())
+	check("Time", block.Time(), b.Time())
+	check("TimeFoS", block.TimeFoS(), b.TimeFoS())
+	check("Extra", block.Extra(), b.Extra())
+	check("Hash", block.Hash(), b.Hash())
+	check("BaseFee", block.header.BaseFee, b.Header().BaseFee)
+	check("RandomReveal", block.header.RandomReveal, b.Header().RandomReveal)
+	check("MixHash", block.header.MixHash, b.Header().MixHash)
 	check("Size", block.Size(), common.StorageSize(len(blockEnc)))
 
 	// Create legacy tx.
