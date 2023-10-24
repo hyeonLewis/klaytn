@@ -34,6 +34,7 @@ import (
 	"github.com/klaytn/klaytn/common/profile"
 	"github.com/klaytn/klaytn/consensus/istanbul"
 	"github.com/klaytn/klaytn/crypto"
+	"github.com/klaytn/klaytn/crypto/bls"
 	"github.com/klaytn/klaytn/governance"
 	"github.com/klaytn/klaytn/log"
 	"github.com/klaytn/klaytn/params"
@@ -74,6 +75,8 @@ func TestHardForkBlock(t *testing.T) {
 
 	genesisKey, err := crypto.HexToECDSA("42eb1412d77987043716f425964b1c8d4c27ce9fb3e9a5b9ab243bc9882fe731")
 	require.Equal(t, nil, err)
+	blsSecretKey, err := bls.GenerateKey(crypto.FromECDSA(genesisKey))
+	require.Equal(t, nil, err)
 
 	var genesisAddr common.Address
 	for addr := range genesis.Alloc {
@@ -92,7 +95,7 @@ func TestHardForkBlock(t *testing.T) {
 	gov := generateGovernaceDataForTest()
 	chainConfig, _, err := blockchain.SetupGenesisBlock(chainDb, &genesis, params.UnusedNetworkId, false, false)
 	governance.AddGovernanceCacheForTest(gov, 0, genesis.Config)
-	engine := istanbulBackend.New(genesisAddr, istanbul.DefaultConfig, genesisKey, nil, chainDb, gov, common.CONSENSUSNODE)
+	engine := istanbulBackend.New(genesisAddr, istanbul.DefaultConfig, genesisKey, blsSecretKey, chainDb, gov, common.CONSENSUSNODE)
 	chain, err := blockchain.NewBlockChain(chainDb, nil, chainConfig, engine, vm.Config{})
 
 	r1, err := hexutil.Decode(string(rawb1))

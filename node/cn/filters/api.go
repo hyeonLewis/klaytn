@@ -252,7 +252,7 @@ func RPCMarshalHeader(head *types.Header, isEnabledEthTxTypeFork bool, isRandaoF
 	}
 
 	if isRandaoFork {
-		result["randomReveal"] = head.RandomReveal
+		result["randomReveal"] = hexutil.Bytes(head.RandomReveal)
 		result["mixHash"] = head.MixHash
 	}
 

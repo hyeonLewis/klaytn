@@ -234,16 +234,18 @@ func setNodeKey(ctx *cli.Context, cfg *p2p.Config) {
 	}
 }
 
-func SetBlsNodeKey(ctx *cli.Context, cfg *node.Config) {
+// setBlsNodeKey loads a bls node key from LoadBlsNodeKey function.
+func setBlsNodeKey(ctx *cli.Context, cfg *node.Config) {
 	blsKey, err := LoadBlsNodeKey(ctx)
 	if err == nil {
-		cfg.BlsKey = &blsKey
+		cfg.BlsKey = blsKey
 	} else {
 		logger.Warn("Failed to load BLS key", "err", err)
 	}
 }
 
-// TODO-randao: save bls key to config.ServiceContext
+// LoadBlsNodeKey loads a bls node key from command line flags, either
+// creating it from ecdsa node key or as a specified hex value.
 func LoadBlsNodeKey(ctx *cli.Context) (bls.SecretKey, error) {
 	if ctx.IsSet(NodeKeyFileFlag.Name) {
 		file := ctx.String(NodeKeyFileFlag.Name)
@@ -377,7 +379,7 @@ func (kCfg *KlayConfig) SetNodeConfig(ctx *cli.Context) {
 	cfg.DisableUnsafeDebug = ctx.Bool(UnsafeDebugDisableFlag.Name)
 
 	SetP2PConfig(ctx, &cfg.P2P)
-	SetBlsNodeKey(ctx, cfg)
+	setBlsNodeKey(ctx, cfg)
 	setIPC(ctx, cfg)
 
 	// httptype is http

@@ -327,10 +327,10 @@ func TestRandaoPrepare(t *testing.T) {
 
 	afterRandomReveal := header.RandomReveal
 	afterMixHash := header.MixHash
-	if afterRandomReveal == nil || len(*afterRandomReveal) != 96 {
+	if len(afterRandomReveal) != 96 || bytes.Equal(afterRandomReveal, make([]byte, 96)) {
 		t.Errorf("random reveal should have value after prepare: %v", afterRandomReveal)
 	}
-	if afterMixHash == nil || len(*afterMixHash) != 32 {
+	if len(*afterMixHash) != 32 || bytes.Equal(afterMixHash.Bytes(), make([]byte, 32)) {
 		t.Errorf("mix hash should have value after prepare: %v", afterMixHash)
 	}
 }

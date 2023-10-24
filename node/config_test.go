@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/klaytn/klaytn/crypto"
+	"github.com/klaytn/klaytn/crypto/bls"
 	"github.com/klaytn/klaytn/networks/p2p"
 )
 
@@ -167,8 +168,16 @@ func TestBlsNodeKeyPersistency(t *testing.T) {
 
 	keyfile := filepath.Join(dir, "unit-test", datadirBlsSecretKey)
 
+	// bls node key in config
+	sk, _ := bls.RandKey()
+	config := &Config{Name: "unit-test", DataDir: dir, BlsKey: sk}
+	blsKey := config.BlsNodeKey()
+	if !bytes.Equal(blsKey.Marshal(), sk.Marshal()) {
+		t.Fatalf("bls node key mismatch: have %x, want %x", blsKey.Marshal(), sk.Marshal())
+	}
+
 	// bls node key is generated and stored in the keyfile
-	config := &Config{Name: "unit-test", DataDir: dir}
+	config = &Config{Name: "unit-test", DataDir: dir}
 	config.BlsNodeKey()
 	if _, err := os.Stat(keyfile); err != nil {
 		t.Fatalf("node key not persisted to data directory: %v", err)
@@ -183,6 +192,7 @@ func TestBlsNodeKeyPersistency(t *testing.T) {
 
 	// Configure a new node and ensure the previously persisted bls key is loaded
 	config = &Config{Name: "unit-test", DataDir: dir}
+	config.BlsNodeKey()
 	blob2, err := os.ReadFile(filepath.Join(keyfile))
 	if err != nil {
 		t.Fatalf("failed to read previously persisted node key: %v", err)

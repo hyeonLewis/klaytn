@@ -96,7 +96,7 @@ type Config struct {
 	// If BlsNodeKey is empty, the default location is the "bls-nodekey" subdirectory of
 	// DataDir. If DataDir is unspecified and BlsKey is empty, an ephemeral directory
 	// is created at the "bls-nodekey".
-	BlsKey *bls.SecretKey `toml:",omitempty"`
+	BlsKey bls.SecretKey `toml:",omitempty"`
 
 	// UseLightweightKDF lowers the memory and CPU requirements of the key store
 	// scrypt KDF at the expense of security.
@@ -382,8 +382,9 @@ func (c *Config) NodeKey() *ecdsa.PrivateKey {
 }
 
 func (c *Config) BlsNodeKey() bls.SecretKey {
-	if c.BlsKey != nil {
-		return *c.BlsKey
+	blsKey := &c.BlsKey
+	if *blsKey != nil {
+		return *blsKey
 	}
 
 	keyfile := c.ResolvePath(datadirBlsSecretKey)

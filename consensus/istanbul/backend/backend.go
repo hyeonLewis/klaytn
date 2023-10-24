@@ -355,6 +355,9 @@ func (sb *backend) Sign(data []byte) ([]byte, error) {
 }
 
 func (sb *backend) CalcRandomReveal(number *big.Int) []byte {
+	if sb.blsSecretKey == nil {
+		return nil
+	}
 	msg := common.BytesToHash(number.Bytes())
 	return bls.Sign(sb.blsSecretKey, msg.Bytes()).Marshal()
 }
@@ -378,8 +381,8 @@ func (sb *backend) VerifyRandomReveal(number *big.Int, randomReveal []byte, blsP
 }
 
 func (sb *backend) VerifyMixHash(randomReveal []byte, mixHash, prevMixHash common.Hash) error {
-	mixHash2 := sb.CalcMixHash(randomReveal, prevMixHash)
-	if mixHash != mixHash2 {
+	recovered := sb.CalcMixHash(randomReveal, prevMixHash)
+	if mixHash != recovered {
 		return errInvalidMixHash
 	}
 	return nil

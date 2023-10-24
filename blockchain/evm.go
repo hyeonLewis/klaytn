@@ -70,8 +70,9 @@ func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common
 		baseFee = new(big.Int).SetUint64(params.ZeroBaseFee)
 	}
 
-	// before randao hardfork, header.MixHash is zero hash
-	mixHash = header.MixHash
+	if header.MixHash != nil {
+		mixHash = header.MixHash
+	}
 
 	return vm.BlockContext{
 		CanTransfer: CanTransfer,

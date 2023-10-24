@@ -248,8 +248,9 @@ func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.S
 		header.BaseFee = misc.NextMagmaBlockBaseFee(parent.Header(), chain.Config().Governance.KIP71)
 	}
 	if chain.Config().IsRandaoForkEnabled(header.Number) {
-		header.RandomReveal = parent.Header().RandomReveal
-		header.MixHash = parent.Header().MixHash
+		// Just make it not nil
+		header.RandomReveal = make([]byte, 96)
+		header.MixHash = new(common.Hash)
 	}
 	return header
 }

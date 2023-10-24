@@ -272,14 +272,20 @@ func (sb *backend) verifyCascadingFields(chain consensus.ChainReader, header *ty
 
 	// Verify the randao header fields
 	if chain.Config().IsRandaoForkEnabled(header.Number) {
-		if err := sb.verifyRandaoFields(header.Number, header, parent); err != nil {
-			return err
+		if chain.Config().RandaoCompatibleBlock.Cmp(header.Number) == 0 {
+			if err := sb.verifyRandaoFields(header.Number, header, common.Hash{}); err != nil {
+				return err
+			}
+		} else {
+			if err := sb.verifyRandaoFields(header.Number, header, *parent.MixHash); err != nil {
+				return err
+			}
 		}
 	}
 	return sb.verifyCommittedSeals(chain, header, parents)
 }
 
-func (sb *backend) verifyRandaoFields(number *big.Int, header, parent *types.Header) error {
+func (sb *backend) verifyRandaoFields(number *big.Int, header *types.Header, parentMixHash common.Hash) error {
 	proposer, err := ecrecover(header)
 	if err != nil {
 		return err
@@ -293,10 +299,10 @@ func (sb *backend) verifyRandaoFields(number *big.Int, header, parent *types.Hea
 		return err
 	}
 
-	if err := sb.VerifyRandomReveal(number, *header.RandomReveal, pubKey); err != nil {
+	if err := sb.VerifyRandomReveal(number, header.RandomReveal, pubKey); err != nil {
 		return err
 	}
-	if err := sb.VerifyMixHash(*header.RandomReveal, *header.MixHash, *parent.MixHash); err != nil {
+	if err := sb.VerifyMixHash(header.RandomReveal, *header.MixHash, parentMixHash); err != nil {
 		return err
 	}
 	return nil
@@ -479,14 +485,16 @@ func (sb *backend) Prepare(chain consensus.ChainReader, header *types.Header) er
 		header.TimeFoS = uint8((t.UnixNano() / 1000 / 1000 / 10) % 100)
 	}
 
+	// set randao fields
 	if chain.Config().IsRandaoForkEnabled(header.Number) {
-		header.RandomReveal = new(hexutil.Bytes)
-		*header.RandomReveal = sb.CalcRandomReveal(header.Number)
+		if header.RandomReveal = sb.CalcRandomReveal(header.Number); header.RandomReveal == nil {
+			return consensus.ErrInvalidRandaoFields
+		}
 		mixHash := common.Hash{}
 		if chain.Config().RandaoCompatibleBlock.Cmp(header.Number) == 0 {
-			mixHash = sb.CalcMixHash(crypto.Keccak256(*header.RandomReveal), common.Hash{})
+			mixHash = sb.CalcMixHash(crypto.Keccak256(header.RandomReveal), common.Hash{})
 		} else {
-			mixHash = sb.CalcMixHash(crypto.Keccak256(*header.RandomReveal), *parent.MixHash)
+			mixHash = sb.CalcMixHash(crypto.Keccak256(header.RandomReveal), *parent.MixHash)
 		}
 		header.MixHash = &mixHash
 	}

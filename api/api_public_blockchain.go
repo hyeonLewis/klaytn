@@ -583,8 +583,16 @@ func RpcOutputBlock(b *types.Block, td *big.Int, inclTx bool, fullTx bool, isEna
 	}
 
 	if isRandaoFork {
-		fields["randomReveal"] = head.RandomReveal
-		fields["mixHash"] = head.MixHash
+		if head.RandomReveal == nil {
+			fields["randomReveal"] = hexutil.Bytes{}
+		} else {
+			fields["randomReveal"] = hexutil.Bytes(head.RandomReveal)
+		}
+		if head.MixHash == nil {
+			fields["mixHash"] = new(common.Hash)
+		} else {
+			fields["mixHash"] = head.MixHash
+		}
 	}
 
 	return fields, nil

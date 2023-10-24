@@ -41,6 +41,11 @@ var dummyChainConfigForEthereumAPITest = &params.ChainConfig{
 	IstanbulCompatibleBlock:  new(big.Int).SetUint64(0),
 	LondonCompatibleBlock:    new(big.Int).SetUint64(0),
 	EthTxTypeCompatibleBlock: new(big.Int).SetUint64(0),
+	MagmaCompatibleBlock:     new(big.Int).SetUint64(0),
+	KoreCompatibleBlock:      new(big.Int).SetUint64(0),
+	ShanghaiCompatibleBlock:  new(big.Int).SetUint64(0),
+	CancunCompatibleBlock:    new(big.Int).SetUint64(0),
+	RandaoCompatibleBlock:    new(big.Int).SetUint64(0),
 	UnitPrice:                25000000000, // 25 ston
 }
 
@@ -198,7 +203,7 @@ func testGetHeader(t *testing.T, testAPIName string, forkEnabled bool) {
 	// GetHeader APIs calls internally below methods.
 	mockBackend.EXPECT().Engine().Return(mockEngine)
 	if forkEnabled {
-		mockBackend.EXPECT().ChainConfig().Return(dummyChainConfigForEthereumAPITest)
+		mockBackend.EXPECT().ChainConfig().Return(dummyChainConfigForEthereumAPITest).AnyTimes()
 	} else {
 		chainConfigForNotCompatibleEthBlock := &params.ChainConfig{
 			ChainID:                  dummyChainConfigForEthereumAPITest.ChainID,
@@ -207,7 +212,7 @@ func testGetHeader(t *testing.T, testAPIName string, forkEnabled bool) {
 			EthTxTypeCompatibleBlock: nil,
 			UnitPrice:                dummyChainConfigForEthereumAPITest.UnitPrice,
 		}
-		mockBackend.EXPECT().ChainConfig().Return(chainConfigForNotCompatibleEthBlock)
+		mockBackend.EXPECT().ChainConfig().Return(chainConfigForNotCompatibleEthBlock).AnyTimes()
 	}
 
 	// Author is called when calculates miner field of Header.
@@ -254,8 +259,7 @@ func testGetHeader(t *testing.T, testAPIName string, forkEnabled bool) {
 	assert.Equal(t, true, ok)
 	assert.NotEqual(t, ethHeader, nil)
 
-	// TODO-klaytn size set to 0x214
-	// We can get a real mashaled data by using real backend instance, not mock
+	// We can get a real marshaled data by using real backend instance, not mock
 	// Mock just return a header instance, not rlp decoded json data
 	expected := make(map[string]interface{})
 	assert.NoError(t, json.Unmarshal([]byte(`
@@ -276,7 +280,7 @@ func testGetHeader(t *testing.T, testAPIName string, forkEnabled bool) {
 		"parentHash": "0xc8036293065bacdfce87debec0094a71dbbe40345b078d21dcc47adb4513f348",
 		"receiptsRoot": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
 		"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
-		"size": "0x214",
+		"size": "0x234",
 		"stateRoot": "0xad31c32942fa033166e4ef588ab973dbe26657c594de4ba98192108becf0fec9",
 		"timestamp": "0x61d53854",
 		"totalDifficulty": "0x5",
@@ -285,7 +289,9 @@ func testGetHeader(t *testing.T, testAPIName string, forkEnabled bool) {
 	}
     `), &expected))
 	if forkEnabled {
-		expected["baseFeePerGas"] = "0x0"
+		expected["result"].(map[string]interface{})["baseFeePerGas"] = "0x0"
+		expected["result"].(map[string]interface{})["randomReveal"] = "0x"
+		expected["result"].(map[string]interface{})["mixHash"] = common.Hash{}.String()
 	}
 	checkEthereumBlockOrHeaderFormat(t, expected, ethHeader)
 }
@@ -310,13 +316,13 @@ func testGetBlock(t *testing.T, testAPIName string, fullTxs bool) {
 	// Creates a MockEngine.
 	mockEngine := mocks.NewMockEngine(mockCtrl)
 	// GetHeader APIs calls internally below methods.
-	mockBackend.EXPECT().Engine().Return(mockEngine)
-	mockBackend.EXPECT().ChainConfig().Return(dummyChainConfigForEthereumAPITest)
+	mockBackend.EXPECT().Engine().Return(mockEngine).AnyTimes()
+	mockBackend.EXPECT().ChainConfig().Return(dummyChainConfigForEthereumAPITest).AnyTimes()
 	// Author is called when calculates miner field of Header.
 	dummyMiner := common.HexToAddress("0x9712f943b296758aaae79944ec975884188d3a96")
-	mockEngine.EXPECT().Author(gomock.Any()).Return(dummyMiner, nil)
+	mockEngine.EXPECT().Author(gomock.Any()).Return(dummyMiner, nil).AnyTimes()
 	var dummyTotalDifficulty uint64 = 5
-	mockBackend.EXPECT().GetTd(gomock.Any()).Return(new(big.Int).SetUint64(dummyTotalDifficulty))
+	mockBackend.EXPECT().GetTd(gomock.Any()).Return(new(big.Int).SetUint64(dummyTotalDifficulty)).AnyTimes()
 
 	// Create dummy header
 	header := types.CopyHeader(&types.Header{

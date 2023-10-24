@@ -37,6 +37,7 @@ import (
 	"github.com/klaytn/klaytn/consensus/istanbul"
 	istanbulBackend "github.com/klaytn/klaytn/consensus/istanbul/backend"
 	"github.com/klaytn/klaytn/crypto"
+	"github.com/klaytn/klaytn/crypto/bls"
 	"github.com/klaytn/klaytn/governance"
 	"github.com/klaytn/klaytn/log"
 	"github.com/klaytn/klaytn/params"
@@ -372,10 +373,14 @@ func NewBCDataForPreGeneratedTest(testDataDir string, tc *preGeneratedTC) (*BCDa
 	////////////////////////////////////////////////////////////////////////////////
 	// Use the first `numValidatorsForTest` accounts as validators
 	validatorAddresses, validatorPrivKeys := getValidatorAddrsAndKeys(addrs, privKeys, numValidatorsForTest)
+	blsSecretKey, err := bls.GenerateKey(crypto.FromECDSA(validatorPrivKeys[0]))
+	if err != nil {
+		return nil, err
+	}
 
 	////////////////////////////////////////////////////////////////////////////////
 	// Setup istanbul consensus backend
-	engine := istanbulBackend.New(genesisAddr, istanbul.DefaultConfig, validatorPrivKeys[0], nil, chainDB, gov, common.CONSENSUSNODE)
+	engine := istanbulBackend.New(genesisAddr, istanbul.DefaultConfig, validatorPrivKeys[0], blsSecretKey, chainDB, gov, common.CONSENSUSNODE)
 
 	////////////////////////////////////////////////////////////////////////////////
 	// Make a blockChain
