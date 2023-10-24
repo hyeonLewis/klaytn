@@ -43,7 +43,7 @@ import (
 
 const (
 	datadirPrivateKey      = "nodekey"            // Path within the datadir to the node's private key
-	datadirBlsSecretKey	   = "bls-nodekey"             // Path within the datadir to the node's bls secret key
+	datadirBlsSecretKey    = "bls-nodekey"        // Path within the datadir to the node's bls secret key
 	datadirDefaultKeyStore = "keystore"           // Path within the datadir to the keystore
 	datadirStaticNodes     = "static-nodes.json"  // Path within the datadir to the static node list
 	datadirTrustedNodes    = "trusted-nodes.json" // Path within the datadir to the trusted node list
@@ -91,6 +91,12 @@ type Config struct {
 	// DataDir. If DataDir is unspecified and KeyStoreDir is empty, an ephemeral directory
 	// is created by New and destroyed when the node is stopped.
 	KeyStoreDir string `toml:",omitempty"`
+
+	// BlsKey is the bls secret key for the node.
+	// If BlsNodeKey is empty, the default location is the "bls-nodekey" subdirectory of
+	// DataDir. If DataDir is unspecified and BlsKey is empty, an ephemeral directory
+	// is created at the "bls-nodekey".
+	BlsKey *bls.SecretKey `toml:",omitempty"`
 
 	// UseLightweightKDF lowers the memory and CPU requirements of the key store
 	// scrypt KDF at the expense of security.
@@ -376,11 +382,14 @@ func (c *Config) NodeKey() *ecdsa.PrivateKey {
 }
 
 func (c *Config) BlsNodeKey() bls.SecretKey {
+	if c.BlsKey != nil {
+		return *c.BlsKey
+	}
+
 	keyfile := c.ResolvePath(datadirBlsSecretKey)
 	if key, err := c.loadBlsNodeKey(keyfile); err == nil {
 		return key
 	}
-	
 	// No persistent key found, generate and store a new one.
 	ecPriv := c.NodeKey()
 	key, err := bls.GenerateKey(crypto.FromECDSA(ecPriv))
@@ -408,7 +417,7 @@ func (c *Config) loadBlsNodeKey(file string) (bls.SecretKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if blsKey, err := bls.SecretKeyFromBytes(blsBytes); err != nil {
 		return nil, err
 	} else {

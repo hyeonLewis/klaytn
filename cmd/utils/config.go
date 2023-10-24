@@ -234,6 +234,16 @@ func setNodeKey(ctx *cli.Context, cfg *p2p.Config) {
 	}
 }
 
+func SetBlsNodeKey(ctx *cli.Context, cfg *node.Config) {
+	blsKey, err := LoadBlsNodeKey(ctx)
+	if err == nil {
+		cfg.BlsKey = &blsKey
+	} else {
+		logger.Warn("Failed to load BLS key", "err", err)
+	}
+}
+
+// TODO-randao: save bls key to config.ServiceContext
 func LoadBlsNodeKey(ctx *cli.Context) (bls.SecretKey, error) {
 	if ctx.IsSet(NodeKeyFileFlag.Name) {
 		file := ctx.String(NodeKeyFileFlag.Name)
@@ -367,6 +377,7 @@ func (kCfg *KlayConfig) SetNodeConfig(ctx *cli.Context) {
 	cfg.DisableUnsafeDebug = ctx.Bool(UnsafeDebugDisableFlag.Name)
 
 	SetP2PConfig(ctx, &cfg.P2P)
+	SetBlsNodeKey(ctx, cfg)
 	setIPC(ctx, cfg)
 
 	// httptype is http
