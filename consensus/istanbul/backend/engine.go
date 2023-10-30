@@ -709,7 +709,7 @@ func (sb *backend) initSnapshot(chain consensus.ChainReader) (*Snapshot, error) 
 	}
 	valSet := validator.NewValidatorSet(istanbulExtra.Validators, nil,
 		istanbul.ProposerPolicy(pset.Policy()),
-		pset.CommitteeSize(), chain)
+		pset.CommitteeSize(), chain, genesis.MixHash)
 	snap := newSnapshot(sb.governance, 0, genesis.Hash(), valSet, chain.Config())
 
 	if err := snap.store(sb.db); err != nil {

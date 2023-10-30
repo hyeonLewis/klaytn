@@ -23,6 +23,7 @@ package backend
 import (
 	"bytes"
 	"encoding/json"
+	"math/big"
 
 	"github.com/klaytn/klaytn/consensus"
 
@@ -205,7 +206,12 @@ func (s *Snapshot) apply(headers []*types.Header, gov governance.Engine, addr co
 			govNode := pset.GoverningNode()
 			minStaking := pset.MinimumStakeBig().Uint64()
 
-			pHeader := chain.GetHeaderByNumber(params.CalcProposerBlockNumber(number + 1))
+			var pHeader *types.Header
+			if chain.Config().IsRandaoForkEnabled(new(big.Int).SetUint64(number + 1)) {
+				pHeader = header
+			} else {
+				pHeader = chain.GetHeaderByNumber(params.CalcProposerBlockNumber(number + 1))
+			}
 			if pHeader != nil {
 				if err := snap.ValSet.Refresh(pHeader.Hash(), pHeader.Number.Uint64(), chain.Config(), isSingle, govNode, minStaking); err != nil {
 					// There are three error cases and they just don't refresh proposers
@@ -225,6 +231,14 @@ func (s *Snapshot) apply(headers []*types.Header, gov governance.Engine, addr co
 	if snap.ValSet.Policy() == istanbul.WeightedRandom {
 		// TODO-Klaytn-Issue1166 We have to update block number of ValSet too.
 		snap.ValSet.SetBlockNum(snap.Number)
+		number := big.NewInt(int64(snap.Number) + 1)
+		if chain.Config().IsRandaoForkEnabled(number) {
+			if chain.Config().RandaoCompatibleBlock.Cmp(number) == 0 {
+				snap.ValSet.SetMixHash(make([]byte, 32))
+			} else {
+				snap.ValSet.SetMixHash(headers[len(headers)-1].MixHash)
+			}
+		}
 	}
 	snap.ValSet.SetSubGroupSize(snap.CommitteeSize)
 
@@ -303,6 +317,9 @@ type snapshotJSON struct {
 	Proposers         []common.Address `json:"proposers"`
 	ProposersBlockNum uint64           `json:"proposersBlockNum"`
 	DemotedValidators []common.Address `json:"demotedValidators"`
+
+	// for kip-146
+	MixHash []byte `json:"mixHash"`
 }
 
 func (s *Snapshot) toJSONStruct() *snapshotJSON {
@@ -313,10 +330,11 @@ func (s *Snapshot) toJSONStruct() *snapshotJSON {
 	var proposersBlockNum uint64
 	var validators []common.Address
 	var demotedValidators []common.Address
+	var mixHash []byte
 
 	// TODO-Klaytn-Issue1166 For weightedCouncil
 	if s.ValSet.Policy() == istanbul.WeightedRandom {
-		validators, demotedValidators, rewardAddrs, votingPowers, weights, proposers, proposersBlockNum = validator.GetWeightedCouncilData(s.ValSet)
+		validators, demotedValidators, rewardAddrs, votingPowers, weights, proposers, proposersBlockNum, mixHash = validator.GetWeightedCouncilData(s.ValSet)
 	} else {
 		validators = s.validators()
 	}
@@ -336,6 +354,7 @@ func (s *Snapshot) toJSONStruct() *snapshotJSON {
 		Proposers:         proposers,
 		ProposersBlockNum: proposersBlockNum,
 		DemotedValidators: demotedValidators,
+		MixHash:           mixHash,
 	}
 }
 
@@ -354,7 +373,7 @@ func (s *Snapshot) UnmarshalJSON(b []byte) error {
 
 	// TODO-Klaytn-Issue1166 For weightedCouncil
 	if j.Policy == istanbul.WeightedRandom {
-		s.ValSet = validator.NewWeightedCouncil(j.Validators, j.DemotedValidators, j.RewardAddrs, j.VotingPowers, j.Weights, j.Policy, j.SubGroupSize, j.Number, j.ProposersBlockNum, nil)
+		s.ValSet = validator.NewWeightedCouncil(j.Validators, j.DemotedValidators, j.RewardAddrs, j.VotingPowers, j.Weights, j.Policy, j.SubGroupSize, j.Number, j.ProposersBlockNum, nil, j.MixHash)
 		validator.RecoverWeightedCouncilProposer(s.ValSet, j.Proposers)
 	} else {
 		s.ValSet = validator.NewSubSet(j.Validators, j.Policy, j.SubGroupSize)

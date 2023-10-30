@@ -683,7 +683,7 @@ func Benchmark_getTargetReceivers(b *testing.B) {
 	// Create ValidatorSet
 	council := getTestCouncil()
 	rewards := getTestRewards()
-	valSet := validator.NewWeightedCouncil(council, nil, rewards, getTestVotingPowers(len(council)), nil, istanbul.WeightedRandom, 21, 0, 0, nil)
+	valSet := validator.NewWeightedCouncil(council, nil, rewards, getTestVotingPowers(len(council)), nil, istanbul.WeightedRandom, 21, 0, 0, nil, nil)
 	valSet.SetBlockNum(uint64(1))
 	valSet.CalcProposer(valSet.GetProposer().Address(), uint64(1))
 	hex := fmt.Sprintf("%015d000000000000000000000000000000000000000000000000000", 1)
@@ -705,7 +705,7 @@ func Test_GossipSubPeerTargets(t *testing.T) {
 	// Create ValidatorSet
 	council := getTestCouncil()
 	rewards := getTestRewards()
-	valSet := validator.NewWeightedCouncil(council, nil, rewards, getTestVotingPowers(len(council)), nil, istanbul.WeightedRandom, 21, 0, 0, nil)
+	valSet := validator.NewWeightedCouncil(council, nil, rewards, getTestVotingPowers(len(council)), nil, istanbul.WeightedRandom, 21, 0, 0, nil, nil)
 	valSet.SetBlockNum(uint64(5))
 
 	// Test for blocks from 0 to maxBlockNum

@@ -113,6 +113,8 @@ type ValidatorSet interface {
 
 	SetBlockNum(blockNum uint64)
 
+	SetMixHash(hash []byte)
+
 	Proposers() []Validator // TODO-Klaytn-Issue1166 For debugging
 
 	TotalVotingPower() uint64

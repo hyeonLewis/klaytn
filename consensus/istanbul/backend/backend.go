@@ -387,7 +387,7 @@ func (sb *backend) ParentValidators(proposal istanbul.Proposal) istanbul.Validat
 	return validator.NewValidatorSet(nil, nil,
 		istanbul.ProposerPolicy(sb.chain.Config().Istanbul.ProposerPolicy),
 		sb.chain.Config().Istanbul.SubGroupSize,
-		sb.chain)
+		sb.chain, proposal.Header().MixHash)
 }
 
 func (sb *backend) getValidators(number uint64, hash common.Hash) istanbul.ValidatorSet {
@@ -395,10 +395,11 @@ func (sb *backend) getValidators(number uint64, hash common.Hash) istanbul.Valid
 	if err != nil {
 		logger.Error("Snapshot not found.", "err", err)
 		// TODO-Klaytn-Governance The following return case should not be called. Refactor it to error handling.
+		header := sb.chain.GetHeaderByNumber(number)
 		return validator.NewValidatorSet(nil, nil,
 			istanbul.ProposerPolicy(sb.chain.Config().Istanbul.ProposerPolicy),
 			sb.chain.Config().Istanbul.SubGroupSize,
-			sb.chain)
+			sb.chain, header.MixHash)
 	}
 	return snap.ValSet
 }

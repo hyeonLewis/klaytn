@@ -21,6 +21,7 @@
 package validator
 
 import (
+	"encoding/binary"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -39,10 +40,10 @@ func New(addr common.Address) istanbul.Validator {
 	}
 }
 
-func NewValidatorSet(addrs, demotedAddrs []common.Address, proposerPolicy istanbul.ProposerPolicy, subGroupSize uint64, chain consensus.ChainReader) istanbul.ValidatorSet {
+func NewValidatorSet(addrs, demotedAddrs []common.Address, proposerPolicy istanbul.ProposerPolicy, subGroupSize uint64, chain consensus.ChainReader, mixHash []byte) istanbul.ValidatorSet {
 	var valSet istanbul.ValidatorSet
 	if proposerPolicy == istanbul.WeightedRandom {
-		valSet = NewWeightedCouncil(addrs, demotedAddrs, nil, nil, nil, proposerPolicy, subGroupSize, 0, 0, chain)
+		valSet = NewWeightedCouncil(addrs, demotedAddrs, nil, nil, nil, proposerPolicy, subGroupSize, 0, 0, chain, mixHash)
 	} else {
 		valSet = NewSubSet(addrs, proposerPolicy, subGroupSize)
 	}
@@ -138,4 +139,38 @@ func SelectRandomCommittee(validators []istanbul.Validator, committeeSize uint64
 	}
 
 	return committee
+}
+
+// SelectRandaoCommittee composes a committee selecting validators randomly based on the mixHash.
+// It returns nil if the given committeeSize is bigger than validatorSize.
+func SelectRandaoCommittee(validators []istanbul.Validator, committeeSize uint64, mixHash []byte) []istanbul.Validator {
+	// ensure committeeSize is valid
+	validatorSize := len(validators)
+	if validatorSize < int(committeeSize) {
+		logger.Error("invalid committee size or validator indexes", "validatorSize", validatorSize,
+			"committeeSize", committeeSize)
+		return nil
+	}
+
+	// it cannot be happened. just to make sure
+	if committeeSize < 2 {
+		if committeeSize == 0 {
+			logger.Error("committee size has an invalid value", "committeeSize", committeeSize)
+			return nil
+		}
+		return validators
+	}
+
+	if len(mixHash) != common.HashLength {
+		if mixHash == nil {
+			// TODO-Klaytn-Istanbul: check if this case is feasible
+			mixHash = make([]byte, common.HashLength)
+		} else {
+			logger.Error("invalid mix hash", "mixHash", mixHash)
+			return nil
+		}
+	}
+
+	seed := binary.BigEndian.Uint64(mixHash[:8])
+	return shuffleValidators(validators, int64(seed))[:committeeSize]
 }

@@ -17,6 +17,8 @@
 package validator
 
 import (
+	"encoding/binary"
+	"encoding/hex"
 	"math/big"
 	"math/rand"
 	"reflect"
@@ -92,6 +94,8 @@ var (
 	}
 	testPrevHash = common.HexToHash("0xf99eb1626cfa6db435c0836235942d7ccaa935f1ae247d3f1c21e495685f903a")
 
+	testMixHash, _ = hex.DecodeString("f99eb1626cfa6db435c0836235942d7ccaa935f1ae247d3f1c21e495685f903a")
+
 	testExpectedProposers = []common.Address{
 		common.HexToAddress("0x8704Ffb473a16638ea42c7704995d6505102a4Ca"),
 		common.HexToAddress("0xC14124d61fc940c7aF29F62438D1B54fD7FFB65B"),
@@ -127,7 +131,13 @@ func makeTestValidators(weights []uint64) (validators istanbul.Validators) {
 
 func makeTestWeightedCouncil(weights []uint64) (valSet *weightedCouncil) {
 	// prepare weighted council
-	valSet = NewWeightedCouncil(testAddrs, nil, testRewardAddrs, testVotingPowers, weights, istanbul.WeightedRandom, 21, 0, 0, nil)
+	valSet = NewWeightedCouncil(testAddrs, nil, testRewardAddrs, testVotingPowers, weights, istanbul.WeightedRandom, 21, 0, 0, nil, nil)
+	return
+}
+
+func makeTestRandaoWeightedCouncil(mixHash []byte) (valSet *weightedCouncil) {
+	// prepare weighted council after Randao hardfork
+	valSet = NewWeightedCouncil(testAddrs, nil, testRewardAddrs, testVotingPowers, testZeroWeights, istanbul.WeightedRandom, 21, 0, 0, nil, mixHash)
 	return
 }
 
@@ -248,11 +258,14 @@ func TestWeightedCouncil_RefreshWithZeroWeight(t *testing.T) {
 	valSet := makeTestWeightedCouncil(testZeroWeights)
 	runRefreshForTest(valSet)
 
+	// Temporary set IstanbulCompatibleBlock to 5
+	fork.SetHardForkBlockNumberConfig(&params.ChainConfig{IstanbulCompatibleBlock: big.NewInt(5)})
+	defer fork.ClearHardForkBlockNumberConfig()
+
 	// Run tests
 
 	// 1. check all validators are chosen for proposers
-	var sortedProposers istanbul.Validators
-	sortedProposers = make([]istanbul.Validator, len(testAddrs))
+	sortedProposers := make(istanbul.Validators, len(testAddrs))
 	copy(sortedProposers, valSet.proposers)
 	sort.Sort(sortedProposers)
 	if !reflect.DeepEqual(sortedProposers, validators) {
@@ -338,6 +351,111 @@ func TestWeightedCouncil_RefreshWithNonZeroWeight(t *testing.T) {
 			}
 		}
 		assert.Equal(t, weight, appearance)
+	}
+}
+
+func TestWeightedCouncil_NilOrInvalidMixHash(t *testing.T) {
+	valSet := makeTestRandaoWeightedCouncil(nil)
+
+	RandaoBlock := big.NewInt(5)
+	fork.SetHardForkBlockNumberConfig(&params.ChainConfig{RandaoCompatibleBlock: RandaoBlock})
+	defer fork.ClearHardForkBlockNumberConfig()
+
+	valSet.SetBlockNum(5)
+	valSet.SetSubGroupSize(12)
+
+	// 1. nil mixHash after Randao enabled
+	// In this case, mixHash will be set to zero hash
+	actualCommittee := valSet.SubList(testPrevHash, &istanbul.View{Sequence: RandaoBlock, Round: new(big.Int).SetUint64(0)})
+	expectedCommittee := SelectRandaoCommittee(valSet.List(), 12, make([]byte, 32))
+
+	if !reflect.DeepEqual(actualCommittee, expectedCommittee) {
+		t.Errorf("committee mismatch: have %v, want %v", actualCommittee, expectedCommittee)
+	}
+
+	// MixHash is not 32 bytes
+	invalidMixHash := make([]byte, 31)
+	valSet.SetMixHash(invalidMixHash)
+
+	// Since mixHash is not 32 bytes, SubList should be same as validators
+	actualCommittee = valSet.SubList(testPrevHash, &istanbul.View{Sequence: RandaoBlock, Round: new(big.Int).SetUint64(0)})
+	expectedCommittee = valSet.List()
+
+	if !reflect.DeepEqual(actualCommittee, expectedCommittee) {
+		t.Errorf("committee mismatch: have %v, want %v", actualCommittee, expectedCommittee)
+	}
+}
+
+func TestWeightedCouncil_CalculateProposerKIP146(t *testing.T) {
+	validators := makeTestValidators(testZeroWeights)
+
+	// Zero mixHash for parent block of RandaoBlock
+	zeroMixHash := make([]byte, 32)
+	valSet := makeTestRandaoWeightedCouncil(zeroMixHash)
+
+	RandaoBlock := big.NewInt(5)
+	fork.SetHardForkBlockNumberConfig(&params.ChainConfig{RandaoCompatibleBlock: RandaoBlock})
+	defer fork.ClearHardForkBlockNumberConfig()
+
+	// Randao should be activated at parent block of RandaoBlock
+	valSet.SetBlockNum(4)
+	valSet.SetSubGroupSize(12)
+
+	// Run tests
+
+	// 1. check before CalcProposer
+	actualProposer := valSet.GetProposer()
+	expectedProposer := validators[0]
+	if !reflect.DeepEqual(actualProposer.Address(), expectedProposer.Address()) {
+		t.Errorf("proposer mismatch: have %v, want %v", actualProposer.Address().String(), expectedProposer.Address().String())
+	}
+
+	// 2. check after CalcProposer
+	valSet.CalcProposer(actualProposer.Address(), 0)
+	actualProposer = valSet.GetProposer()
+	shuffledValidators := shuffleValidators(validators, int64(binary.BigEndian.Uint64(zeroMixHash[:8])))
+	expectedProposer = shuffledValidators[0]
+	if !reflect.DeepEqual(actualProposer.Address(), expectedProposer.Address()) {
+		t.Errorf("proposer mismatch: have %v, want %v", actualProposer.Address().String(), expectedProposer.Address().String())
+	}
+
+	// Next block will contain non-zero mixHash
+	valSet.SetMixHash(testMixHash)
+	valSet.SetBlockNum(5)
+
+	// check after CalcProposer
+	valSet.CalcProposer(actualProposer.Address(), 0)
+	actualProposer = valSet.GetProposer()
+	shuffledValidators = shuffleValidators(validators, int64(binary.BigEndian.Uint64(testMixHash[:8])))
+	expectedProposer = shuffledValidators[0]
+	if !reflect.DeepEqual(actualProposer.Address(), expectedProposer.Address()) {
+		t.Errorf("proposer mismatch: have %v, want %v", actualProposer.Address().String(), expectedProposer.Address().String())
+	}
+}
+
+func TestWeightedCouncil_CalculateProposerByRoundKIP146(t *testing.T) {
+	validators := makeTestValidators(testZeroWeights)
+
+	valSet := makeTestRandaoWeightedCouncil(testMixHash)
+
+	RandaoBlock := big.NewInt(5)
+	fork.SetHardForkBlockNumberConfig(&params.ChainConfig{RandaoCompatibleBlock: RandaoBlock})
+	defer fork.ClearHardForkBlockNumberConfig()
+
+	valSet.SetSubGroupSize(12)
+	valSet.SetBlockNum(5)
+
+	// Run tests
+
+	// Proposer should be selected by roundrobin when RC occurs based on same committee
+	for i := 0; i < 5; i++ {
+		valSet.CalcProposer(valSet.GetProposer().Address(), uint64(i))
+		actualProposer := valSet.GetProposer()
+		shuffledValidators := shuffleValidators(validators, int64(binary.BigEndian.Uint64(testMixHash[:8])))
+		expectedProposer := shuffledValidators[i]
+		if !reflect.DeepEqual(actualProposer.Address(), expectedProposer.Address()) {
+			t.Errorf("proposer mismatch: have %v, want %v", actualProposer.Address().String(), expectedProposer.Address().String())
+		}
 	}
 }
 
@@ -537,6 +655,31 @@ func TestWeightedCouncil_SubListWithProposer(t *testing.T) {
 	}
 }
 
+func TestWeightedCouncil_SubListWithProposerKIP146(t *testing.T) {
+	var (
+		valSet        = makeTestRandaoWeightedCouncil(testMixHash)
+		prevHash      = crypto.Keccak256Hash([]byte("This is a test"))
+		committeeSize = uint64(12)
+		RandaoBlock   = int64(5)
+		round         = uint64(0)
+	)
+
+	fork.SetHardForkBlockNumberConfig(&params.ChainConfig{RandaoCompatibleBlock: big.NewInt(RandaoBlock)})
+	defer fork.ClearHardForkBlockNumberConfig()
+
+	valSet.SetBlockNum(uint64(RandaoBlock) - 1)
+	valSet.SetSubGroupSize(committeeSize)
+	valSet.CalcProposer(valSet.GetProposer().Address(), round)
+
+	committee := valSet.SubList(prevHash, &istanbul.View{Sequence: big.NewInt(RandaoBlock), Round: big.NewInt(int64(round))})
+	selected := SelectRandaoCommittee(valSet.List(), committeeSize, testMixHash)
+	if !reflect.DeepEqual(committee, selected) {
+		t.Errorf("committee mismatch: have %v, want %v", committee, selected)
+	}
+	assert.Equal(t, selected[0], valSet.GetProposer())
+	assert.Contains(t, committee, valSet.GetProposer())
+}
+
 func TestWeightedCouncil_Copy(t *testing.T) {
 	valSet := makeTestWeightedCouncil(testNonZeroWeights)
 
@@ -548,7 +691,8 @@ func TestWeightedCouncil_Copy(t *testing.T) {
 		valSet.proposersBlockNum != copiedValSet.proposersBlockNum ||
 		!reflect.DeepEqual(valSet.validators, copiedValSet.validators) ||
 		!reflect.DeepEqual(valSet.proposers, copiedValSet.proposers) ||
-		!reflect.DeepEqual(valSet.stakingInfo, copiedValSet.stakingInfo) {
+		!reflect.DeepEqual(valSet.stakingInfo, copiedValSet.stakingInfo) ||
+		!reflect.DeepEqual(valSet.mixHash, copiedValSet.mixHash) {
 		t.Errorf("copied weightedCouncil is different from original.")
 		t.Errorf("block number. original : %v, Copied : %v", valSet.blockNum, copiedValSet.blockNum)
 		t.Errorf("proposer. original : %v, Copied : %v", valSet.GetProposer(), copiedValSet.GetProposer())
@@ -558,5 +702,28 @@ func TestWeightedCouncil_Copy(t *testing.T) {
 		t.Errorf("validators. original : %v, Copied : %v", valSet.validators, copiedValSet.validators)
 		t.Errorf("proposers. original : %v, Copied : %v", valSet.proposers, copiedValSet.proposers)
 		t.Errorf("staking. original : %v, Copied : %v", valSet.stakingInfo, copiedValSet.stakingInfo)
+		t.Errorf("mixHash. original : %v, Copied : %v", valSet.mixHash, copiedValSet.mixHash)
+	}
+
+	// check each variable is same except selector(function) after set mixHash
+	valSet.SetMixHash(testMixHash)
+	copiedValSet = valSet.Copy().(*weightedCouncil)
+	if valSet.blockNum != copiedValSet.blockNum || valSet.GetProposer() != copiedValSet.GetProposer() ||
+		valSet.subSize != copiedValSet.subSize || valSet.policy != copiedValSet.policy ||
+		valSet.proposersBlockNum != copiedValSet.proposersBlockNum ||
+		!reflect.DeepEqual(valSet.validators, copiedValSet.validators) ||
+		!reflect.DeepEqual(valSet.proposers, copiedValSet.proposers) ||
+		!reflect.DeepEqual(valSet.stakingInfo, copiedValSet.stakingInfo) ||
+		!reflect.DeepEqual(valSet.mixHash, copiedValSet.mixHash) {
+		t.Errorf("copied weightedCouncil is different from original.")
+		t.Errorf("block number. original : %v, Copied : %v", valSet.blockNum, copiedValSet.blockNum)
+		t.Errorf("proposer. original : %v, Copied : %v", valSet.GetProposer(), copiedValSet.GetProposer())
+		t.Errorf("subSize. original : %v, Copied : %v", valSet.subSize, copiedValSet.subSize)
+		t.Errorf("policy. original : %v, Copied : %v", valSet.policy, copiedValSet.policy)
+		t.Errorf("proposersBlockNum. original : %v, Copied : %v", valSet.proposersBlockNum, copiedValSet.proposersBlockNum)
+		t.Errorf("validators. original : %v, Copied : %v", valSet.validators, copiedValSet.validators)
+		t.Errorf("proposers. original : %v, Copied : %v", valSet.proposers, copiedValSet.proposers)
+		t.Errorf("staking. original : %v, Copied : %v", valSet.stakingInfo, copiedValSet.stakingInfo)
+		t.Errorf("mixHash. original : %v, Copied : %v", valSet.mixHash, copiedValSet.mixHash)
 	}
 }
